@@ -1,6 +1,11 @@
 [package]
-name = "toml-edit"
+name = "toml-merge"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "toml_merge"
+path = "src/lib.rs"
+
 [dependencies]
+toml_edit = "0.25"
