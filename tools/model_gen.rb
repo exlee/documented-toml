@@ -49,6 +49,7 @@ class Model
   def known?(name) = @index.key?(name)
   def package_of(name) = @index[name]&.first
   def kind_of(name) = @index[name]&.at(1)
+  def definition(name) = @index.fetch(name).at(2)
 
   def elements(pkg) = (pkg["classes"] || []) + (pkg["enums"] || [])
 
@@ -166,6 +167,16 @@ end
 module Mdj
   module_function
 
+  # Grid layout. StarUML resizes a view up to its content on first repaint, so
+  # these are starting sizes, not final ones.
+  COLUMN_WIDTH = 320
+  ROW_HEIGHT = 240
+  ORIGIN = 48
+  MIN_WIDTH = 140
+  MAX_WIDTH = 460
+  LINE_HEIGHT = 16
+  HEADER_HEIGHT = 34
+
   # StarUML ids are opaque strings. Deriving them from the element path keeps
   # them stable across runs, so regenerating produces a readable diff.
   def id_for(path)
@@ -183,7 +194,7 @@ module Mdj
   def project(model)
     project_id = id_for("project")
     model_id = id_for("model")
-    root = {
+    {
       "_type" => "Project", "_id" => project_id, "name" => model.project,
       "ownedElements" => [{
         "_type" => "UMLModel", "_id" => model_id,
@@ -191,20 +202,26 @@ module Mdj
         "ownedElements" => model.packages.map { |pkg| package(model, pkg, model_id) }
       }]
     }
-    root
   end
 
   def package(model, pkg, parent_id)
     name = pkg.fetch("name")
     pkg_id = id_for("pkg:#{name}")
     log("mdj", "package #{name}")
-    owned = model.elements(pkg).map { |el| element(model, el, pkg_id) }
-    owned << {
-      "_type" => "UMLClassDiagram", "_id" => id_for("diagram:#{name}"),
-      "_parent" => { "$ref" => pkg_id }, "name" => pkg.fetch("title", name),
-      "visible" => true, "defaultDiagram" => name == model.packages.first["name"]
-    }
-    relations(model, pkg).each { |rel| owned << rel }
+
+    nodes = model.elements(pkg).to_h { |el| [el.fetch("name"), element(model, el, pkg_id)] }
+    # A relationship belongs to its source element, matching its _parent.
+    (pkg["relations"] || []).each do |rel|
+      from = rel.fetch("from")
+      owner = nodes[from]
+      next log("mdj", "  skip relation, #{from} is not owned by #{name}") unless owner
+      next log("mdj", "  skip relation, unknown #{rel.fetch('to')}") unless model.known?(rel.fetch("to"))
+
+      (owner["ownedElements"] ||= []) << relationship(model, rel)
+    end
+
+    owned = nodes.values
+    owned << diagram(model, pkg, pkg_id)
     node = {
       "_type" => "UMLPackage", "_id" => pkg_id,
       "_parent" => { "$ref" => parent_id }, "name" => name,
@@ -213,6 +230,8 @@ module Mdj
     node["documentation"] = squash(pkg["doc"]) if pkg["doc"]
     node
   end
+
+  # --- model elements -------------------------------------------------------
 
   def element(model, el, parent_id)
     return enumeration(el, parent_id) if el.key?("literals")
@@ -253,12 +272,7 @@ module Mdj
   def type_ref(model, type)
     return nil if type.nil?
 
-    if model.known?(type)
-      prefix = model.kind_of(type) == :enum ? "enum" : "class"
-      { "$ref" => id_for("#{prefix}:#{type}") }
-    else
-      type
-    end
+    model.known?(type) ? ref_of(model, type) : type
   end
 
   def attribute(model, attr, parent_id, owner)
@@ -299,36 +313,36 @@ module Mdj
     node
   end
 
-  def relations(model, pkg)
-    (pkg["relations"] || []).filter_map do |rel|
-      from = rel.fetch("from")
-      to = rel.fetch("to")
-      next log("mdj", "  skip relation, unknown #{from} or #{to}") unless model.known?(from) && model.known?(to)
-
-      source = ref_of(model, from)
-      target = ref_of(model, to)
-      rid = id_for("rel:#{rel.fetch('kind')}:#{from}:#{to}:#{rel['name']}#{rel['label']}")
-      case rel.fetch("kind")
-      when "generalization"
-        {
-          "_type" => "UMLGeneralization", "_id" => rid,
-          "_parent" => source, "source" => source, "target" => target
-        }
-      when "dependency"
-        node = {
-          "_type" => "UMLDependency", "_id" => rid,
-          "_parent" => source, "source" => source, "target" => target
-        }
-        node["name"] = rel["label"] if rel["label"]
-        node
-      else
-        association(rel, rid, source, target)
-      end
+  def relationship(model, rel)
+    from = rel.fetch("from")
+    to = rel.fetch("to")
+    source = ref_of(model, from)
+    target = ref_of(model, to)
+    rid = relationship_id(rel)
+    case rel.fetch("kind")
+    when "generalization"
+      {
+        "_type" => "UMLGeneralization", "_id" => rid,
+        "_parent" => source, "source" => source, "target" => target
+      }
+    when "dependency"
+      node = {
+        "_type" => "UMLDependency", "_id" => rid,
+        "_parent" => source, "source" => source, "target" => target
+      }
+      node["name"] = rel["label"] if rel["label"]
+      node
+    else
+      association(rel, rid, source, target)
     end
   end
 
   def association(rel, rid, source, target)
-    aggregation = rel.fetch("kind") == "composition" ? "composite" : rel.fetch("kind") == "aggregation" ? "shared" : "none"
+    aggregation = case rel.fetch("kind")
+                  when "composition" then "composite"
+                  when "aggregation" then "shared"
+                  else "none"
+                  end
     {
       "_type" => "UMLAssociation", "_id" => rid, "_parent" => source,
       "end1" => {
@@ -342,6 +356,78 @@ module Mdj
         "name" => rel["name"].to_s, "multiplicity" => rel["multiplicity"].to_s,
         "navigable" => "navigable"
       }
+    }
+  end
+
+  def relationship_id(rel)
+    id_for("rel:#{rel.fetch('kind')}:#{rel.fetch('from')}:#{rel.fetch('to')}:#{rel['name']}#{rel['label']}")
+  end
+
+  # --- diagram views --------------------------------------------------------
+
+  # A view carries geometry only. UMLClassifierView's constructor builds the
+  # name, attribute, operation, reception and template compartments, and
+  # Element#load appends what the file holds to what the constructor made, so
+  # writing compartments here would duplicate them.
+  def diagram(model, pkg, pkg_id)
+    name = pkg.fetch("name")
+    diagram_id = id_for("diagram:#{name}")
+    shown = model.elements(pkg).map { |el| el.fetch("name") } + model.foreign_names(pkg)
+    placed = place(model, shown, name, diagram_id)
+    edges = (pkg["relations"] || []).filter_map { |rel| edge_view(model, rel, placed, diagram_id) }
+    log("mdj", "  diagram #{name} (#{placed.size} nodes, #{edges.size} edges)")
+    {
+      "_type" => "UMLClassDiagram", "_id" => diagram_id,
+      "_parent" => { "$ref" => pkg_id }, "name" => pkg.fetch("title", name),
+      "visible" => true, "defaultDiagram" => name == model.packages.first["name"],
+      "ownedViews" => placed.values + edges
+    }
+  end
+
+  def place(model, names, pkg_name, diagram_id)
+    columns = Math.sqrt(names.size).ceil
+    names.each_with_index.to_h do |element_name, i|
+      width, height = view_size(model, element_name)
+      view = {
+        "_type" => model.kind_of(element_name) == :enum ? "UMLEnumerationView" : "UMLClassView",
+        "_id" => id_for("view:#{pkg_name}:#{element_name}"),
+        "_parent" => { "$ref" => diagram_id },
+        "model" => ref_of(model, element_name),
+        "left" => ORIGIN + (i % columns) * COLUMN_WIDTH,
+        "top" => ORIGIN + (i / columns) * ROW_HEIGHT,
+        "width" => width, "height" => height
+      }
+      [element_name, view]
+    end
+  end
+
+  def view_size(model, name)
+    el = model.definition(name)
+    return [MIN_WIDTH, HEADER_HEIGHT + LINE_HEIGHT * el.fetch("literals").size] if el.key?("literals")
+
+    members = (el["attributes"] || []).map { |a| Puml.attribute(a) } +
+              (el["operations"] || []).map { |o| Puml.operation(o) }
+    widest = ([name.length] + members.map(&:length)).max
+    width = (widest * 7 + 28).clamp(MIN_WIDTH, MAX_WIDTH)
+    [width, HEADER_HEIGHT + LINE_HEIGHT * members.size + 8]
+  end
+
+  def edge_view(model, rel, placed, diagram_id)
+    tail = placed[rel.fetch("from")]
+    head = placed[rel.fetch("to")]
+    return nil unless tail && head
+
+    type = case rel.fetch("kind")
+           when "generalization" then "UMLGeneralizationView"
+           when "dependency" then "UMLDependencyView"
+           else "UMLAssociationView"
+           end
+    {
+      "_type" => type, "_id" => id_for("edgeview:#{diagram_id}:#{relationship_id(rel)}"),
+      "_parent" => { "$ref" => diagram_id },
+      "model" => { "$ref" => relationship_id(rel) },
+      "tail" => { "$ref" => tail.fetch("_id") },
+      "head" => { "$ref" => head.fetch("_id") }
     }
   end
 

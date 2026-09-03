@@ -44,8 +44,16 @@ java -jar plantuml.jar -syntax < doc/model/domain.puml    # parse check only
 
 Open `toml-merge.mdj` directly. Classes, enumerations, attributes, operations
 and relationships land in the Model Explorer, grouped into one package per
-scope. Each package also holds an empty class diagram; drag elements onto it and
-StarUML builds the views with correct compartments.
+scope, and each package holds a class diagram already populated with its
+elements and their relationships.
+
+Views carry geometry only. `UMLClassifierView`'s constructor builds the name,
+attribute, operation, reception and template compartments, and `Element#load`
+appends what the file holds to what the constructor made, so writing
+compartments into the file would duplicate them.
+
+The generator lays views out on a grid. Diagram > Layout in StarUML rearranges
+them, and that arrangement is lost on the next regeneration.
 
 Element ids are derived from element names, so they are stable across runs and
 regenerating produces a readable diff.
