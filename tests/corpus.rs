@@ -10,12 +10,15 @@
 // Nothing calls these until the harness lands.
 #![allow(dead_code)]
 
+use nonempty::NonEmpty;
+
 /// One `corpus/NNNN.txt` file.
 struct CorpusFile {
     /// Path of the file, for failure messages.
     path: String,
-    /// The groups in the file, in the order they appear.
-    groups: Vec<Group>,
+    /// The groups in the file, in the order they appear. A file with no
+    /// `--- DEF ---` section is malformed, not empty.
+    groups: NonEmpty<Group>,
     /// Notes for the reader, stripped before the sections are parsed.
     comments: Vec<CorpusComment>,
 }
@@ -27,8 +30,9 @@ struct CorpusFile {
 struct Group {
     /// The text of the `--- DEF ---` section.
     default_src: String,
-    /// The cases stated against this default.
-    cases: Vec<Case>,
+    /// The cases stated against this default. A `--- DEF ---` with no
+    /// `--- USR ---` after it is malformed, not empty.
+    cases: NonEmpty<Case>,
 }
 
 /// One user document and its expected merge output.

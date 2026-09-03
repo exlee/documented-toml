@@ -51,9 +51,9 @@ package domain <<external>> {
   class MergeOptions
 }
 
-CorpusFile *-- "*" Group : groups
+CorpusFile *-- "1..*" Group : groups
 CorpusFile *-- "*" CorpusComment : comments
-Group *-- "*" Case : cases
+Group *-- "1..*" Case : cases
 Section --> "1" SectionKind : kind
 CorpusFile ..> Section : parsed from
 CorpusHarness ..> CorpusFile : reads

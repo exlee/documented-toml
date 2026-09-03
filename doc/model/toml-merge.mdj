@@ -271,7 +271,7 @@
                   },
                   "name": "segments",
                   "type": "String",
-                  "multiplicity": "*"
+                  "multiplicity": "1..*"
                 }
               ],
               "operations": [
@@ -1625,7 +1625,7 @@
                   },
                   "left": 688,
                   "top": 48,
-                  "width": 189,
+                  "width": 210,
                   "height": 74,
                   "subViews": [
                     {
@@ -1711,7 +1711,7 @@
                           "model": {
                             "$ref": "ZxBhMyrI3T3rupOM06YV"
                           },
-                          "text": "+ segments : String [*]"
+                          "text": "+ segments : String [1..*]"
                         }
                       ]
                     },
@@ -9345,7 +9345,7 @@
                       "$ref": "PCr6KqdjoyRSnExYv/Wu"
                     },
                     "name": "groups",
-                    "multiplicity": "*",
+                    "multiplicity": "1..*",
                     "navigable": "navigable"
                   }
                 },
@@ -9443,7 +9443,7 @@
                       "$ref": "u6L3M22ftCFZNmZmZrae"
                     },
                     "name": "cases",
-                    "multiplicity": "*",
+                    "multiplicity": "1..*",
                     "navigable": "navigable"
                   }
                 }
@@ -11371,7 +11371,7 @@
                       "_parent": {
                         "$ref": "oqjkkCIBE79zP5lXqC3o"
                       },
-                      "text": "*"
+                      "text": "1..*"
                     },
                     {
                       "_type": "UMLQualifierCompartmentView",
@@ -11657,7 +11657,7 @@
                       "_parent": {
                         "$ref": "ri1A/nQ2IvQNE0uN5dwz"
                       },
-                      "text": "*"
+                      "text": "1..*"
                     },
                     {
                       "_type": "UMLQualifierCompartmentView",

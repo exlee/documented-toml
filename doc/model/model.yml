@@ -37,7 +37,7 @@ packages:
       - name: DottedPath
         doc: A key path such as server.timeout.
         attributes:
-          - { name: segments, type: String, multiplicity: "*" }
+          - { name: segments, type: String, multiplicity: "1..*" }
         operations:
           - { name: to_string, returns: String, query: true }
 
@@ -264,9 +264,9 @@ packages:
         literals: [Def, Usr, Res]
 
     relations:
-      - { kind: composition, from: CorpusFile, to: Group, name: groups, multiplicity: "*" }
+      - { kind: composition, from: CorpusFile, to: Group, name: groups, multiplicity: "1..*" }
       - { kind: composition, from: CorpusFile, to: CorpusComment, name: comments, multiplicity: "*" }
-      - { kind: composition, from: Group, to: Case, name: cases, multiplicity: "*" }
+      - { kind: composition, from: Group, to: Case, name: cases, multiplicity: "1..*" }
       - { kind: association, from: Section, to: SectionKind, name: kind, multiplicity: "1" }
       - { kind: dependency, from: CorpusFile, to: Section, label: parsed from }
       - { kind: dependency, from: CorpusHarness, to: CorpusFile, label: reads }

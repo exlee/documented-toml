@@ -8,4 +8,5 @@ name = "toml_merge"
 path = "src/lib.rs"
 
 [dependencies]
+nonempty = "0.12"
 toml_edit = "0.25"

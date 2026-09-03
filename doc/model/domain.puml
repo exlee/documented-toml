@@ -21,7 +21,7 @@ package domain {
   }
   ' A key path such as server.timeout.
   class DottedPath {
-    + segments : String [*]
+    + segments : String [1..*]
     --
     + to_string() : String
   }
