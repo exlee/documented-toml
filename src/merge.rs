@@ -4,6 +4,7 @@ use toml_edit::DocumentMut;
 
 use crate::options::MergeOptions;
 use crate::report::{Report, SpanIndex};
+use crate::source::SourceDocument;
 
 /// The merged document and its report.
 ///
@@ -25,6 +26,10 @@ pub struct Merged {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct MergeEngine {
+    /// The shipped document, which gives the shape and the order.
+    pub(crate) defaults: SourceDocument,
+    /// The person's document, which gives the values.
+    pub(crate) user: SourceDocument,
     pub(crate) options: MergeOptions,
     pub(crate) spans: SpanIndex,
     pub(crate) report: Report,

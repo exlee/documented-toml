@@ -12,6 +12,7 @@ pub mod merge;
 pub mod options;
 pub mod path;
 pub mod report;
+pub mod source;
 
 pub use decor::{DefaultEcho, DocBlock, Marker, Prefix, PrefixLine};
 pub use error::Error;
@@ -21,3 +22,4 @@ pub use path::DottedPath;
 pub use report::{
     Diagnostic, DiagnosticKind, Position, Report, Severity, Span, SpanIndex, TomlType,
 };
+pub use source::SourceDocument;

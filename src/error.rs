@@ -17,4 +17,12 @@ pub enum Error {
         /// The underlying parse failure.
         source: TomlError,
     },
+    /// The defaults parsed and hold text, but declare no keys.
+    ///
+    /// A defaults document made only of comments has nothing to merge into and
+    /// nothing to document. That is an application bug, so it fails here
+    /// instead of becoming a state the merge has to carry. A zero-byte defaults
+    /// document is a separate case and is allowed, see
+    /// [`SourceDocument::Empty`](crate::SourceDocument::Empty).
+    DefaultsDeclareNoKeys,
 }
