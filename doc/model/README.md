@@ -47,10 +47,15 @@ and relationships land in the Model Explorer, grouped into one package per
 scope, and each package holds a class diagram already populated with its
 elements and their relationships.
 
-Views carry geometry only. `UMLClassifierView`'s constructor builds the name,
-attribute, operation, reception and template compartments, and `Element#load`
-appends what the file holds to what the constructor made, so writing
-compartments into the file would duplicate them.
+A view is more than geometry. The metamodel declares compartments as embedded
+references, `attributeCompartment ref UMLAttributeCompartmentView
+embedded=subViews`, and `Element#load` swaps the constructor's compartment for
+the file's only when that reference is present. A view written without them
+keeps the constructor's compartments, which carry no `model`, and the box then
+draws empty and cannot be selected. So each node view carries its name,
+attribute, operation, reception and template compartments, each edge carries its
+three labels, and associations carry six more plus two qualifier compartments,
+every one of them named by both `subViews` and its own reference field.
 
 The generator lays views out on a grid. Diagram > Layout in StarUML rearranges
 them, and that arrangement is lost on the next regeneration.

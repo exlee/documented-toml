@@ -365,16 +365,17 @@ module Mdj
 
   # --- diagram views --------------------------------------------------------
 
-  # A view carries geometry only. UMLClassifierView's constructor builds the
-  # name, attribute, operation, reception and template compartments, and
-  # Element#load appends what the file holds to what the constructor made, so
-  # writing compartments here would duplicate them.
+  # A view carries more than geometry. Compartments are declared in the metamodel
+  # embedded references (`attributeCompartment ref ... embedded=subViews`), and
+  # Element#load replaces the constructor's compartment with the file's only
+  # when the reference is present. Omitting them leaves the constructor's
+  # model-less compartments in place, and the box draws with nothing in it.
   def diagram(model, pkg, pkg_id)
     name = pkg.fetch("name")
     diagram_id = id_for("diagram:#{name}")
     shown = model.elements(pkg).map { |el| el.fetch("name") } + model.foreign_names(pkg)
     placed = place(model, shown, name, diagram_id)
-    edges = (pkg["relations"] || []).filter_map { |rel| edge_view(model, rel, placed, diagram_id) }
+    edges = (pkg["relations"] || []).filter_map { |rel| edge_view(model, rel, placed, diagram_id, name) }
     log("mdj", "  diagram #{name} (#{placed.size} nodes, #{edges.size} edges)")
     {
       "_type" => "UMLClassDiagram", "_id" => diagram_id,
@@ -387,48 +388,187 @@ module Mdj
   def place(model, names, pkg_name, diagram_id)
     columns = Math.sqrt(names.size).ceil
     names.each_with_index.to_h do |element_name, i|
-      width, height = view_size(model, element_name)
-      view = {
-        "_type" => model.kind_of(element_name) == :enum ? "UMLEnumerationView" : "UMLClassView",
-        "_id" => id_for("view:#{pkg_name}:#{element_name}"),
-        "_parent" => { "$ref" => diagram_id },
-        "model" => ref_of(model, element_name),
-        "left" => ORIGIN + (i % columns) * COLUMN_WIDTH,
-        "top" => ORIGIN + (i / columns) * ROW_HEIGHT,
-        "width" => width, "height" => height
-      }
-      [element_name, view]
+      left = ORIGIN + (i % columns) * COLUMN_WIDTH
+      top = ORIGIN + (i / columns) * ROW_HEIGHT
+      [element_name, node_view(model, element_name, pkg_name, diagram_id, left, top)]
     end
+  end
+
+  def node_view(model, name, pkg_name, diagram_id, left, top)
+    el = model.definition(name)
+    enum = el.key?("literals")
+    vid = id_for("view:#{pkg_name}:#{name}")
+    scope = "#{pkg_name}:#{name}"
+    subject = ref_of(model, name)
+    width, height = view_size(model, name)
+
+    compartments = { "nameCompartment" => name_compartment(el, name, scope, vid, subject) }
+    compartments["attributeCompartment"] =
+      list_compartment("UMLAttributeCompartmentView", "attrs:#{scope}", vid, subject,
+                       member_views(el, "attributes", "UMLAttributeView", scope, name) { |a| Puml.attribute(a) })
+    compartments["operationCompartment"] =
+      list_compartment("UMLOperationCompartmentView", "ops:#{scope}", vid, subject,
+                       member_views(el, "operations", "UMLOperationView", scope, name) { |o| Puml.operation(o) })
+    compartments["receptionCompartment"] =
+      list_compartment("UMLReceptionCompartmentView", "recv:#{scope}", vid, subject, [])
+    compartments["templateParameterCompartment"] =
+      list_compartment("UMLTemplateParameterCompartmentView", "tmpl:#{scope}", vid, subject, [])
+    if enum
+      compartments["enumerationLiteralCompartment"] =
+        list_compartment("UMLEnumerationLiteralCompartmentView", "lits:#{scope}", vid, subject,
+                         literal_views(el, scope, name))
+    end
+
+    view = {
+      "_type" => enum ? "UMLEnumerationView" : "UMLClassView", "_id" => vid,
+      "_parent" => { "$ref" => diagram_id }, "model" => subject,
+      "left" => left, "top" => top, "width" => width, "height" => height,
+      "subViews" => compartments.values
+    }
+    compartments.each { |field, compartment| view[field] = { "$ref" => compartment.fetch("_id") } }
+    view
+  end
+
+  def name_compartment(el, name, scope, parent_id, subject)
+    cid = id_for("namecomp:#{scope}")
+    labels = {
+      "stereotypeLabel" => label_view("stereo:#{scope}", cid, el["stereotype"] ? "«#{el['stereotype']}»" : nil),
+      "nameLabel" => label_view("name:#{scope}", cid, name),
+      "namespaceLabel" => label_view("ns:#{scope}", cid, nil),
+      "propertyLabel" => label_view("prop:#{scope}", cid, nil)
+    }
+    compartment = {
+      "_type" => "UMLNameCompartmentView", "_id" => cid,
+      "_parent" => { "$ref" => parent_id }, "model" => subject,
+      "subViews" => labels.values
+    }
+    labels.each { |field, label| compartment[field] = { "$ref" => label.fetch("_id") } }
+    compartment
+  end
+
+  def label_view(key, parent_id, text)
+    node = {
+      "_type" => "LabelView", "_id" => id_for("label:#{key}"),
+      "_parent" => { "$ref" => parent_id }, "horizontalAlignment" => 2, "verticalAlignment" => 5
+    }
+    if text
+      node["text"] = text
+    else
+      node["visible"] = false
+    end
+    node
+  end
+
+  def list_compartment(type, key, parent_id, subject, items)
+    node = {
+      "_type" => type, "_id" => id_for("comp:#{key}"),
+      "_parent" => { "$ref" => parent_id }, "model" => subject
+    }
+    node["subViews"] = items if items.any?
+    node
+  end
+
+  def member_views(el, field, type, scope, owner)
+    (el[field] || []).map do |member|
+      member_view(type, "#{field}:#{scope}.#{member.fetch('name')}",
+                  id_for("comp:#{field == 'attributes' ? 'attrs' : 'ops'}:#{scope}"),
+                  { "$ref" => id_for("#{field == 'attributes' ? 'attr' : 'op'}:#{owner}.#{member.fetch('name')}") },
+                  yield(member))
+    end
+  end
+
+  def literal_views(el, scope, owner)
+    el.fetch("literals").map do |literal|
+      member_view("UMLEnumerationLiteralView", "lit:#{scope}.#{literal}",
+                  id_for("comp:lits:#{scope}"),
+                  { "$ref" => id_for("lit:#{owner}.#{literal}") }, literal)
+    end
+  end
+
+  def member_view(type, key, parent_id, subject, text)
+    {
+      "_type" => type, "_id" => id_for("memberview:#{key}"),
+      "_parent" => { "$ref" => parent_id }, "model" => subject, "text" => text
+    }
   end
 
   def view_size(model, name)
     el = model.definition(name)
-    return [MIN_WIDTH, HEADER_HEIGHT + LINE_HEIGHT * el.fetch("literals").size] if el.key?("literals")
-
-    members = (el["attributes"] || []).map { |a| Puml.attribute(a) } +
-              (el["operations"] || []).map { |o| Puml.operation(o) }
+    members = if el.key?("literals")
+                el.fetch("literals")
+              else
+                (el["attributes"] || []).map { |a| Puml.attribute(a) } +
+                  (el["operations"] || []).map { |o| Puml.operation(o) }
+              end
     widest = ([name.length] + members.map(&:length)).max
     width = (widest * 7 + 28).clamp(MIN_WIDTH, MAX_WIDTH)
     [width, HEADER_HEIGHT + LINE_HEIGHT * members.size + 8]
   end
 
-  def edge_view(model, rel, placed, diagram_id)
+  # Edge labels are embedded references too, so an edge needs the same treatment.
+  EDGE_LABELS = %w[nameLabel stereotypeLabel propertyLabel].freeze
+  ASSOCIATION_LABELS = %w[
+    tailRoleNameLabel tailPropertyLabel tailMultiplicityLabel
+    headRoleNameLabel headPropertyLabel headMultiplicityLabel
+  ].freeze
+
+  def edge_view(model, rel, placed, diagram_id, pkg_name)
     tail = placed[rel.fetch("from")]
     head = placed[rel.fetch("to")]
     return nil unless tail && head
 
+    association = !%w[generalization dependency].include?(rel.fetch("kind"))
     type = case rel.fetch("kind")
            when "generalization" then "UMLGeneralizationView"
            when "dependency" then "UMLDependencyView"
            else "UMLAssociationView"
            end
-    {
-      "_type" => type, "_id" => id_for("edgeview:#{diagram_id}:#{relationship_id(rel)}"),
-      "_parent" => { "$ref" => diagram_id },
+    scope = "#{pkg_name}:#{relationship_id(rel)}"
+    eid = id_for("edgeview:#{scope}")
+    fields = EDGE_LABELS + (association ? ASSOCIATION_LABELS : [])
+    labels = fields.to_h do |field|
+      text = edge_label_text(field, rel)
+      [field, edge_label_view("#{field}:#{scope}", eid, text)]
+    end
+
+    view = {
+      "_type" => type, "_id" => eid, "_parent" => { "$ref" => diagram_id },
       "model" => { "$ref" => relationship_id(rel) },
       "tail" => { "$ref" => tail.fetch("_id") },
-      "head" => { "$ref" => head.fetch("_id") }
+      "head" => { "$ref" => head.fetch("_id") },
+      "subViews" => labels.values
     }
+    if association
+      %w[tailQualifiersCompartment headQualifiersCompartment].each_with_index do |field, i|
+        compartment = list_compartment("UMLQualifierCompartmentView", "qual#{i}:#{scope}", eid,
+                                       { "$ref" => relationship_id(rel) }, [])
+        view["subViews"] << compartment
+        view[field] = { "$ref" => compartment.fetch("_id") }
+      end
+    end
+    labels.each { |field, label| view[field] = { "$ref" => label.fetch("_id") } }
+    view
+  end
+
+  def edge_label_text(field, rel)
+    case field
+    when "nameLabel" then rel["label"] || rel["name"]
+    when "headRoleNameLabel" then rel["name"]
+    when "headMultiplicityLabel" then rel["multiplicity"]
+    end
+  end
+
+  def edge_label_view(key, parent_id, text)
+    node = {
+      "_type" => "EdgeLabelView", "_id" => id_for("edgelabel:#{key}"),
+      "_parent" => { "$ref" => parent_id }
+    }
+    if text
+      node["text"] = text
+    else
+      node["visible"] = false
+    end
+    node
   end
 
   def ref_of(model, name)
