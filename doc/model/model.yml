@@ -1,0 +1,285 @@
+# Single source for every generated model artifact.
+#
+#   ruby tools/model_gen.rb --puml --mdj
+#
+# Outputs: doc/model/*.puml (PlantUML) and doc/model/toml-merge.mdj (StarUML).
+# Edit this file, never the generated ones.
+#
+# Rust sum types with payloads have no UML equivalent. They carry the
+# <<rust enum>> stereotype on an abstract class, with one subclass per variant.
+# Payload-free Rust enums become UML enumerations.
+
+project: toml-merge
+
+packages:
+  - name: domain
+    title: Core domain
+    doc: >-
+      The public API: options in, a merged document and a report out.
+
+    classes:
+      - name: MergeOptions
+        doc: Builder holding the marker and the rename rules.
+        attributes:
+          - { name: marker, type: String, default: '"#:"' }
+        operations:
+          - { name: new, returns: MergeOptions, static: true }
+          - { name: marker, params: [{ name: marker, type: String }], returns: MergeOptions }
+          - { name: migrate, params: [{ name: from, type: String }, { name: to, type: String }], returns: MergeOptions }
+          - { name: merge, params: [{ name: default_src, type: String }, { name: user_src, type: String }], returns: "Result<Merged, Error>" }
+
+      - name: Migration
+        doc: One rename rule, applied before the merge walk.
+        attributes:
+          - { name: from, type: DottedPath }
+          - { name: to, type: DottedPath }
+
+      - name: DottedPath
+        doc: A key path such as server.timeout.
+        attributes:
+          - { name: segments, type: String, multiplicity: "*" }
+        operations:
+          - { name: to_string, returns: String, query: true }
+
+      - name: MergeEngine
+        doc: Walks the default document as the spine and transplants user values.
+        operations:
+          - { name: run, params: [{ name: options, type: MergeOptions }], returns: Merged }
+          - { name: walk_table, params: [{ name: path, type: DottedPath }], returns: Table }
+          - { name: append_unknown, returns: void }
+          - { name: renumber_positions, returns: void }
+
+      - name: SpanIndex
+        doc: >-
+          Byte spans harvested from the user document before it is converted to
+          DocumentMut, which discards them.
+        operations:
+          - { name: harvest, params: [{ name: user_src, type: String }], returns: SpanIndex, static: true }
+          - { name: lookup, params: [{ name: path, type: DottedPath }], returns: Span, query: true }
+
+      - name: Span
+        attributes:
+          - { name: start, type: usize }
+          - { name: end, type: usize }
+        operations:
+          - { name: line_column, params: [{ name: source, type: String }], returns: Position, query: true }
+
+      - name: Position
+        attributes:
+          - { name: line, type: usize }
+          - { name: column, type: usize }
+
+      - name: Merged
+        doc: >-
+          The merged document and its report. Also the effective configuration,
+          because every default key is materialised with a live value.
+        operations:
+          - { name: document, returns: DocumentMut, query: true }
+          - { name: to_toml_string, returns: String, query: true }
+
+      - name: Report
+        operations:
+          - { name: diagnostics, returns: "Diagnostic [*]", query: true }
+          - { name: has_errors, returns: boolean, query: true }
+
+      - name: Diagnostic
+        attributes:
+          - { name: path, type: DottedPath }
+          - { name: line, type: usize }
+          - { name: column, type: usize }
+
+      - name: DiagnosticKind
+        abstract: true
+        stereotype: rust enum
+
+      - name: UnknownKey
+        doc: The defaults do not declare this key. Warning.
+
+      - name: TypeMismatch
+        doc: The user's value has a different TOML type from the default's. Error.
+        attributes:
+          - { name: expected, type: TomlType }
+          - { name: found, type: TomlType }
+
+      - name: Migrated
+        doc: A rename rule moved this value. Warning.
+        attributes:
+          - { name: from, type: DottedPath }
+
+      - name: Error
+        abstract: true
+        stereotype: rust enum
+
+      - name: DefaultParseError
+        attributes:
+          - { name: source, type: TomlError }
+
+      - name: UserParseError
+        attributes:
+          - { name: source, type: TomlError }
+
+    enums:
+      - name: Severity
+        literals: [Warning, Error]
+      - name: TomlType
+        literals: [String, Integer, Float, Boolean, Datetime, Array, InlineTable, Table, ArrayOfTables]
+
+    relations:
+      - { kind: composition, from: MergeOptions, to: Migration, name: migrations, multiplicity: "*" }
+      - { kind: composition, from: Merged, to: Report, name: report, multiplicity: "1" }
+      - { kind: composition, from: Report, to: Diagnostic, name: diagnostics, multiplicity: "*" }
+      - { kind: composition, from: Diagnostic, to: DiagnosticKind, name: kind, multiplicity: "1" }
+      - { kind: association, from: Diagnostic, to: Severity, name: severity, multiplicity: "1" }
+      - { kind: composition, from: SpanIndex, to: Span, name: spans, multiplicity: "*" }
+      - { kind: association, from: Merged, to: DocumentMut, name: document, multiplicity: "1" }
+      - { kind: generalization, from: UnknownKey, to: DiagnosticKind }
+      - { kind: generalization, from: TypeMismatch, to: DiagnosticKind }
+      - { kind: generalization, from: Migrated, to: DiagnosticKind }
+      - { kind: generalization, from: DefaultParseError, to: Error }
+      - { kind: generalization, from: UserParseError, to: Error }
+      - { kind: dependency, from: MergeEngine, to: SpanIndex, label: harvests }
+      - { kind: dependency, from: MergeEngine, to: Merged, label: produces }
+      - { kind: dependency, from: MergeEngine, to: DocBlock, label: assembles }
+      - { kind: dependency, from: MergeOptions, to: MergeEngine, label: drives }
+
+  - name: decor
+    title: Comment block model
+    doc: >-
+      Classification and reassembly of the text above a key. A Decor prefix is
+      one raw string covering blank lines, indentation and comment lines.
+
+    classes:
+      - name: Marker
+        doc: The comment prefix owned by the tool, "#:" by default.
+        attributes:
+          - { name: value, type: String, default: '"#:"' }
+        operations:
+          - { name: classify, params: [{ name: line, type: String }], returns: PrefixLine, query: true }
+
+      - name: Prefix
+        doc: The raw decor text between the previous item and this key.
+        attributes:
+          - { name: raw, type: String }
+        operations:
+          - { name: split, params: [{ name: marker, type: Marker }], returns: "PrefixLine [*]", query: true }
+
+      - name: PrefixLine
+        abstract: true
+        stereotype: rust enum
+        attributes:
+          - { name: text, type: String }
+
+      - name: MarkerLine
+        doc: Owned by the tool. Rewritten on every merge.
+
+      - name: UserLine
+        doc: Owned by the person. Never rewritten, reflowed or reordered.
+
+      - name: BlankLine
+        doc: Empty or whitespace only.
+
+      - name: DocBlock
+        doc: >-
+          One key's rebuilt prefix. Rendered in order, leading blanks, then the
+          documentation lines from the defaults, then the echo, then the user's
+          own lines.
+        operations:
+          - { name: render, returns: String, query: true }
+          - { name: from_default, params: [{ name: default_prefix, type: Prefix }, { name: user_prefix, type: Prefix }], returns: DocBlock, static: true }
+
+      - name: DefaultEcho
+        doc: >-
+          The marker line recording the shipped default, written only when the
+          user's value differs from it.
+        attributes:
+          - { name: key, type: String }
+          - { name: value, type: String }
+        operations:
+          - { name: render, params: [{ name: marker, type: Marker }], returns: MarkerLine, query: true }
+
+    relations:
+      - { kind: composition, from: Prefix, to: PrefixLine, name: lines, multiplicity: "*" }
+      - { kind: generalization, from: MarkerLine, to: PrefixLine }
+      - { kind: generalization, from: UserLine, to: PrefixLine }
+      - { kind: generalization, from: BlankLine, to: PrefixLine }
+      - { kind: composition, from: DocBlock, to: BlankLine, name: leading_blanks, multiplicity: "*" }
+      - { kind: composition, from: DocBlock, to: MarkerLine, name: doc_lines, multiplicity: "*" }
+      - { kind: composition, from: DocBlock, to: DefaultEcho, name: echo, multiplicity: "0..1" }
+      - { kind: composition, from: DocBlock, to: UserLine, name: user_lines, multiplicity: "*" }
+      - { kind: dependency, from: Prefix, to: Marker, label: classifies with }
+      - { kind: dependency, from: DocBlock, to: Decor, label: written to }
+
+  - name: corpus
+    title: Corpus format
+    doc: >-
+      The text specification of merge behaviour, parsed by the test harness.
+
+    classes:
+      - name: CorpusFile
+        attributes:
+          - { name: path, type: String }
+        operations:
+          - { name: parse, params: [{ name: text, type: String }], returns: CorpusFile, static: true }
+
+      - name: Group
+        doc: One default document and every case stated against it.
+        attributes:
+          - { name: default_src, type: String }
+
+      - name: Case
+        doc: One user document and its expected merge output.
+        attributes:
+          - { name: index, type: usize }
+          - { name: user_src, type: String }
+          - { name: expected, type: String }
+        operations:
+          - { name: run, returns: CaseOutcome }
+
+      - name: Section
+        doc: A delimiter line and the text it opens.
+        attributes:
+          - { name: line, type: usize }
+        operations:
+          - { name: delimiter, params: [{ name: kind, type: SectionKind }], returns: String, static: true }
+
+      - name: CorpusComment
+        doc: >-
+          A note for the reader, exactly three hashes, stripped before parsing
+          and allowed anywhere.
+        attributes:
+          - { name: text, type: String }
+
+      - name: CorpusHarness
+        operations:
+          - { name: run_all, params: [{ name: dir, type: String }], returns: void }
+          - { name: diff, params: [{ name: expected, type: String }, { name: actual, type: String }], returns: String }
+
+      - name: CaseOutcome
+        attributes:
+          - { name: passed, type: boolean }
+          - { name: actual, type: String }
+
+    enums:
+      - name: SectionKind
+        literals: [Def, Usr, Res]
+
+    relations:
+      - { kind: composition, from: CorpusFile, to: Group, name: groups, multiplicity: "*" }
+      - { kind: composition, from: CorpusFile, to: CorpusComment, name: comments, multiplicity: "*" }
+      - { kind: composition, from: Group, to: Case, name: cases, multiplicity: "*" }
+      - { kind: association, from: Section, to: SectionKind, name: kind, multiplicity: "1" }
+      - { kind: dependency, from: CorpusFile, to: Section, label: parsed from }
+      - { kind: dependency, from: CorpusHarness, to: CorpusFile, label: reads }
+      - { kind: dependency, from: Case, to: MergeOptions, label: invokes }
+
+  - name: toml_edit
+    title: External
+    external: true
+    doc: Types from the toml_edit crate that the model refers to.
+    classes:
+      - name: DocumentMut
+      - name: Item
+      - name: Key
+      - name: Table
+      - name: Decor
+      - name: TomlError
