@@ -7,6 +7,10 @@ edition = "2024"
 name = "toml_merge"
 path = "src/lib.rs"
 
+[[bin]]
+name = "toml-merge"
+path = "src/main.rs"
+
 [dependencies]
 nonempty = "0.12"
 toml_edit = "0.25"

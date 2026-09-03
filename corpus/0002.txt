@@ -1,0 +1,16 @@
+### Documentation is rewritten from the defaults on every merge. Lines the
+### person wrote are never touched.
+--- DEF ---
+#: Request timeout in seconds.
+#: Values above 300 are clamped.
+timeout = 30
+--- USR ---
+#: an older sentence that is no longer in the defaults
+# bumped for ticket 44
+timeout = 120
+--- RES ---
+#: Request timeout in seconds.
+#: Values above 300 are clamped.
+#: timeout = 30
+# bumped for ticket 44
+timeout = 120

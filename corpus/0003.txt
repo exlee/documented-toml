@@ -1,0 +1,26 @@
+### A key the defaults gained since the person last opened the file is written
+### in, with its documentation and no echo: the live value already is the
+### default.
+--- DEF ---
+#: Where to listen.
+host = "localhost"
+
+#: Added in 1.4.
+retries = 3
+--- USR ---
+host = "0.0.0.0"
+--- RES ---
+#: Where to listen.
+#: host = "localhost"
+host = "0.0.0.0"
+
+#: Added in 1.4.
+retries = 3
+### An empty user file is every default, with no echoes.
+--- USR ---
+--- RES ---
+#: Where to listen.
+host = "localhost"
+
+#: Added in 1.4.
+retries = 3

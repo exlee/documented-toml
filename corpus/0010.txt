@@ -1,0 +1,15 @@
+### Only marker lines propagate from the defaults. A plain comment there is a
+### note for whoever maintains the defaults and never reaches a user's file.
+--- DEF ---
+# TODO: revisit before 1.0
+#: Request timeout in seconds.
+timeout = 30
+
+# not sure we still need this one
+retries = 3
+--- USR ---
+--- RES ---
+#: Request timeout in seconds.
+timeout = 30
+
+retries = 3

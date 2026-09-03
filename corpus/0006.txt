@@ -1,0 +1,21 @@
+### A value of the wrong type stays exactly as the person wrote it. Overwriting
+### it would destroy their input at the moment they most need to see it. Only
+### the block above it is rebuilt, because that text belongs to the tool.
+--- DEF ---
+#: Seconds to wait.
+timeout = 30
+--- USR ---
+timeout = "fast"
+--- RES ---
+#: Seconds to wait.
+#: timeout = 30
+timeout = "fast"
+### A table where the defaults declare a value is the same case.
+--- USR ---
+[timeout]
+seconds = 30
+--- RES ---
+#: Seconds to wait.
+#: timeout = 30
+[timeout]
+seconds = 30

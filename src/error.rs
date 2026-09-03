@@ -25,4 +25,35 @@ pub enum Error {
     /// document is a separate case and is allowed, see
     /// [`SourceDocument::Empty`](crate::SourceDocument::Empty).
     DefaultsDeclareNoKeys,
+    /// A rename rule was given a path that is not a TOML key path.
+    MigrationPath {
+        /// The underlying parse failure.
+        source: TomlError,
+    },
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DefaultParse { source } => {
+                write!(f, "the default document does not parse: {source}")
+            }
+            Self::UserParse { source } => write!(f, "the user document does not parse: {source}"),
+            Self::DefaultsDeclareNoKeys => f.write_str("the default document declares no keys"),
+            Self::MigrationPath { source } => {
+                write!(f, "a rename rule has an unreadable path: {source}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::DefaultParse { source }
+            | Self::UserParse { source }
+            | Self::MigrationPath { source } => Some(source),
+            Self::DefaultsDeclareNoKeys => None,
+        }
+    }
 }

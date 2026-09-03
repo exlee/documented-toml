@@ -1,0 +1,22 @@
+### If the person declares any entry of an array of tables, that set is
+### complete. The defaults contribute nothing, including to entries that look
+### like they correspond. Only the documentation is refreshed.
+--- DEF ---
+#: One block per server.
+[[server]]
+name = "primary"
+port = 8080
+--- USR ---
+[[server]]
+name = "mine"
+--- RES ---
+#: One block per server.
+[[server]]
+name = "mine"
+### With no entry from the person, the defaults' own entries are written in.
+--- USR ---
+--- RES ---
+#: One block per server.
+[[server]]
+name = "primary"
+port = 8080

@@ -1,0 +1,17 @@
+### A line is the tool's when its first non-whitespace characters are exactly
+### the marker and its run of hashes is no longer than the marker's. With the
+### default marker, `#:` is the tool's; `##:` and `#` are the person's.
+--- DEF ---
+#: Documented.
+value = 1
+--- USR ---
+##: this looks like a marker but is not
+#not spaced
+#:also the tool's, so it goes
+value = 2
+--- RES ---
+#: Documented.
+#: value = 1
+##: this looks like a marker but is not
+#not spaced
+value = 2

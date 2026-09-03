@@ -252,10 +252,20 @@ pub struct Diagnostic {
 }
 
 pub enum Error {
-    Default(toml_edit::TomlError),
-    User(toml_edit::TomlError),
+    DefaultParse { source: toml_edit::TomlError },
+    UserParse { source: toml_edit::TomlError },
+    DefaultsDeclareNoKeys,
+    MigrationPath { source: toml_edit::TomlError },
 }
 ```
+
+Which document failed to parse is part of the error, because a broken default
+document is the application's fault and a broken user document is the person's.
+`DefaultsDeclareNoKeys` is the defaults parsing into text that declares nothing
+to merge, which is an application bug; a zero-byte defaults document is a
+separate case and is allowed. `migrate` takes its paths as written and reads
+them as TOML key paths at merge time, so an unreadable one fails the merge,
+not the builder call.
 
 `to_toml_string()` produces the file to write back. `document()` is the same
 content for callers that want to deserialize it. There is one document because
@@ -318,7 +328,9 @@ Grammar:
 - A section with no content is an empty document.
 
 `tests/corpus.rs` walks the files in order and compares each merge against its
-`RES` section exactly, including the trailing newline.
+`RES` section exactly, including the trailing newline. It then merges every
+`RES` section against its own `DEF` again and requires the text not to move,
+which puts section 13's idempotence under test.
 
 Diagnostics, migrations, options and the CLI are covered by ordinary Rust tests.
 The corpus is for merge output only.
