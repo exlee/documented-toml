@@ -21,6 +21,40 @@ pub struct Merged {
     /// Everything the merge noticed.
     pub report: Report,
     pub(crate) document: DocumentMut,
+    /// The line ending the person's file was written with.
+    pub(crate) newline: Newline,
+}
+
+/// How a file ends its lines.
+///
+/// The comment machinery works in lines and writes them back joined with `\n`,
+/// so a file written with `\r\n` would come back rewritten from top to bottom.
+/// The person's own ending is recorded here and restored on the way out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Newline {
+    #[default]
+    Lf,
+    CrLf,
+}
+
+impl Newline {
+    /// The ending the person used. A file holding one `\r\n` is a CRLF file:
+    /// mixed endings are what an editor leaves behind, not a choice.
+    pub(crate) fn of(src: &str) -> Self {
+        if src.contains("\r\n") {
+            Self::CrLf
+        } else {
+            Self::Lf
+        }
+    }
+
+    /// Rewrites every line ending in `text` as this one.
+    pub(crate) fn apply(self, text: String) -> String {
+        match self {
+            Self::Lf => text,
+            Self::CrLf => text.replace("\r\n", "\n").replace('\n', "\r\n"),
+        }
+    }
 }
 
 impl Merged {
@@ -34,9 +68,15 @@ impl Merged {
         self.document
     }
 
-    /// The file to write back.
+    /// The file to write back, with the person's own line ending.
     pub fn to_toml_string(&self) -> String {
-        self.document.to_string()
+        self.newline.apply(self.document.to_string())
+    }
+
+    /// The line ending the person's file was written with, which is the one
+    /// [`Merged::to_toml_string`] writes.
+    pub fn newline(&self) -> Newline {
+        self.newline
     }
 }
 
@@ -61,6 +101,10 @@ pub struct MergeEngine {
     /// Optional keys the person has not set, written back as `#:` lines and
     /// waiting for something to sit above.
     pub(crate) pending: Vec<String>,
+    /// The dotted keys the walk has descended through, which the `[table]`
+    /// header above does not supply. A recorded default is TOML, so it names
+    /// its key the way the line under it does.
+    pub(crate) dotted: Vec<String>,
 }
 
 impl MergeEngine {
@@ -82,6 +126,7 @@ impl MergeEngine {
             report: Report::default(),
             template: Template::default(),
             pending: Vec::new(),
+            dotted: Vec::new(),
         }
     }
 
@@ -105,6 +150,7 @@ impl MergeEngine {
         Merged {
             report: self.report,
             document,
+            newline: Newline::of(&self.user_src),
         }
     }
 
@@ -284,7 +330,9 @@ impl MergeEngine {
             (_, Item::Table(user_table)) => {
                 let mut merged = Table::new();
                 merged.set_dotted(user_table.is_dotted());
-                self.merge_table(&Table::new(), user_table, &mut merged, Some(path));
+                self.descend(user_key, user_table, |engine| {
+                    engine.merge_table(&Table::new(), user_table, &mut merged, Some(path));
+                });
                 Item::Table(merged)
             }
             (_, Item::ArrayOfTables(user_array)) => {
@@ -370,7 +418,9 @@ impl MergeEngine {
                     let mut merged = Table::new();
                     merged.set_dotted(user_table.is_dotted());
                     merged.set_implicit(default_table.is_implicit() && user_table.is_implicit());
-                    self.merge_table(default_table, user_table, &mut merged, Some(path));
+                    self.descend(user_key, user_table, |engine| {
+                        engine.merge_table(default_table, user_table, &mut merged, Some(path));
+                    });
                     Item::Table(merged)
                 }
                 (Item::ArrayOfTables(_), Item::ArrayOfTables(user_array)) => {
@@ -385,6 +435,19 @@ impl MergeEngine {
         let mut key = user_key.clone();
         set_prefix(&mut key, &mut item, block.render(self.marker()));
         out.insert_formatted(&key, item);
+    }
+
+    /// Walks the keys of `table` with `key` on the dotted prefix when the table
+    /// is written dotted, and off it when the table has a header of its own.
+    fn descend(&mut self, key: &Key, table: &Table, walk: impl FnOnce(&mut Self)) {
+        let dotted = table.is_dotted();
+        if dotted {
+            self.dotted.push(key.display_repr().into_owned());
+        }
+        walk(self);
+        if dotted {
+            self.dotted.pop();
+        }
     }
 
     /// Moves any optional keys waiting to be written above whatever comes next.
@@ -471,9 +534,21 @@ impl MergeEngine {
             return;
         }
         block.sample = Sample::Echo(DefaultEcho {
-            key: default_key.display_repr().into_owned(),
+            key: self.dotted_name(default_key),
             value: default_text,
         });
+    }
+
+    /// The key a recorded default names: the leaf under every dotted key the
+    /// walk descended through, which is the same path the line below it takes.
+    fn dotted_name(&self, key: &Key) -> String {
+        let mut name = String::new();
+        for segment in &self.dotted {
+            name.push_str(segment);
+            name.push('.');
+        }
+        name.push_str(&key.display_repr());
+        name
     }
 
     // -- keys only on one side -------------------------------------------

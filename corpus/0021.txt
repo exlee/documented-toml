@@ -1,0 +1,57 @@
+### A recorded default is TOML, so it names its key the way the line under it
+### does. A key written dotted keeps every segment the `[table]` header above
+### does not supply, and uncommenting the line sets the key it is about.
+--- DEF ---
+##: How long to wait.
+a.b = 1
+--- USR ---
+a.b = 2
+--- RES ---
+##: How long to wait.
+#: a.b = 1
+a.b = 2
+### The person's own spelling decides it. Written under a header, the header
+### supplies the prefix and the line names the leaf alone.
+--- USR ---
+[a]
+b = 2
+--- RES ---
+[a]
+##: How long to wait.
+#: b = 1
+b = 2
+### As many segments as the key has.
+--- DEF ---
+##: How long to wait.
+a.b.c = 1
+--- USR ---
+a.b.c = 2
+--- RES ---
+##: How long to wait.
+#: a.b.c = 1
+a.b.c = 2
+### A dotted key under a header keeps the segments the header does not give.
+--- DEF ---
+[s]
+##: How long to wait.
+a.b = 1
+--- USR ---
+[s]
+a.b = 2
+--- RES ---
+[s]
+##: How long to wait.
+#: a.b = 1
+a.b = 2
+### The defaults writing it under a header decides nothing: the merged file
+### takes the person's shape, and the line follows it.
+--- DEF ---
+[a]
+##: How long to wait.
+b = 1
+--- USR ---
+a.b = 2
+--- RES ---
+##: How long to wait.
+#: a.b = 1
+a.b = 2

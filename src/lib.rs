@@ -24,7 +24,7 @@ pub use decor::{
     Sample,
 };
 pub use error::Error;
-pub use merge::{MergeEngine, Merged};
+pub use merge::{MergeEngine, Merged, Newline};
 pub use options::{MergeOptions, Migration};
 pub use path::DottedPath;
 pub use report::{

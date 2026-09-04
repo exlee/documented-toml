@@ -120,6 +120,18 @@ The person can see what they departed from without opening the application's
 source. When the value equals the default, or the key was absent and the merge
 inserted it, no such line is written: the live value already is the default.
 
+The line is TOML, so it names its key the way the line under it does. A key the
+person wrote dotted keeps every segment the `[table]` header above does not
+supply, and the person's spelling is the one that counts, the merged file being
+theirs:
+
+```toml
+[s]
+##: How long to wait.
+#: a.b = 30
+a.b = 5
+```
+
 A generated line takes the sample slot, replacing whatever samples the defaults
 wrote in the same block. A sample for a different option belongs in a block of
 its own, a blank line away.
@@ -358,12 +370,15 @@ impl MergeOptions {
     pub fn merge(&self, default_src: &str, user_src: &str) -> Result<Merged, Error>;
 }
 
-pub struct Merged { pub report: Report, /* document */ }
+pub struct Merged { pub report: Report, /* document, newline */ }
 
 impl Merged {
     pub fn document(&self) -> &toml_edit::DocumentMut;
     pub fn to_toml_string(&self) -> String;
+    pub fn newline(&self) -> Newline;
 }
+
+pub enum Newline { Lf, CrLf }
 
 pub struct Report { /* diagnostics */ }
 
@@ -427,6 +442,14 @@ float equality and treats `1_000` and `1000` as the different text they are.
 **Transplanting** a user value moves the user's `Key` and `Item` into the output
 document, so the value's own formatting (quoting style, inline table spacing,
 multi-line array layout) comes along without being re-rendered.
+
+**Line endings are the person's.** The comment machinery works in lines and
+writes them back joined with `\n`, so a file written with `\r\n` would come
+back rewritten from top to bottom, every line of it, the person's own comments
+included. The ending is read off the user document, a single `\r\n` making it a
+CRLF file, and `to_toml_string()` writes every line with it. The defaults decide
+nothing here: the file being written back is the person's. `document()` holds
+the merged content with `\n`, which is what a caller deserializing it wants.
 
 ## 11. Corpus
 
