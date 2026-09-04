@@ -1,12 +1,12 @@
 ### Block assembly, section 4.3 of the design. Blank lines the person had, then
-### the documentation, then the echo, then the person's own comments, then the
-### key. Their notes sit closest to the key they annotate.
+### the prose, then the TOML text under it, then the person's own comments,
+### then the key. Their notes sit closest to the key they annotate.
 ###
 ### This file is the one to change if the opposite order is ever wanted.
 --- DEF ---
 first = 1
 
-#: What the second one does.
+##: What the second one does.
 second = 2
 --- USR ---
 first = 1
@@ -17,7 +17,7 @@ second = 9
 --- RES ---
 first = 1
 
-#: What the second one does.
+##: What the second one does.
 #: second = 2
 # why this is 9
 # and a second line about it

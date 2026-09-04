@@ -1,27 +1,27 @@
 ### A value the person changed keeps their value, and the shipped default is
-### recorded above it so they can see what they departed from.
+### recorded above it as a sample so they can see what they departed from.
 --- DEF ---
-#: Normal counter
+##: Normal counter
 counter = 0
 --- USR ---
 counter = 1
 --- RES ---
-#: Normal counter
+##: Normal counter
 #: counter = 0
 counter = 1
 --- USR ---
 counter = 0
 --- RES ---
-#: Normal counter
+##: Normal counter
 counter = 0
 ### The value's own formatting travels with it, and so does the default's.
 --- DEF ---
-#: How many bytes to buffer.
+##: How many bytes to buffer.
 buffer = 1_000
 --- USR ---
 buffer = 2000
 --- RES ---
-#: How many bytes to buffer.
+##: How many bytes to buffer.
 #: buffer = 1_000
 buffer = 2000
 ### Same number, different text: the person wrote something else, so the
@@ -29,6 +29,6 @@ buffer = 2000
 --- USR ---
 buffer = 1000
 --- RES ---
-#: How many bytes to buffer.
+##: How many bytes to buffer.
 #: buffer = 1_000
 buffer = 1000

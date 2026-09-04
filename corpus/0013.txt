@@ -1,26 +1,26 @@
 ### A table the person did not write is inserted with its documentation, and
 ### the tables nested under it come with it.
 --- DEF ---
-#: Everything about the network.
+##: Everything about the network.
 [net]
-#: Seconds.
+##: Seconds.
 timeout = 30
 
-#: Retry policy.
+##: Retry policy.
 [net.retry]
-#: How many times.
+##: How many times.
 count = 3
 --- USR ---
 [net]
 timeout = 5
 --- RES ---
-#: Everything about the network.
+##: Everything about the network.
 [net]
-#: Seconds.
+##: Seconds.
 #: timeout = 30
 timeout = 5
 
-#: Retry policy.
+##: Retry policy.
 [net.retry]
-#: How many times.
+##: How many times.
 count = 3

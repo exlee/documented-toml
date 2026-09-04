@@ -7,7 +7,7 @@ fn a_rule_moves_a_value_to_its_new_path() {
     let merged = MergeOptions::new()
         .migrate("server.timeout", "network.timeout_seconds")
         .merge(
-            "#: Seconds to wait.\n[network]\ntimeout_seconds = 30\n",
+            "##: Seconds to wait.\n[network]\ntimeout_seconds = 30\n",
             "[server]\ntimeout = 99\n",
         )
         .unwrap();
@@ -22,7 +22,7 @@ fn a_rule_moves_a_value_to_its_new_path() {
 fn the_moved_value_takes_part_in_the_merge_as_if_it_were_written_there() {
     let merged = MergeOptions::new()
         .migrate("old", "new")
-        .merge("#: Doc.\nnew = 1\n", "old = 7\n")
+        .merge("##: Doc.\nnew = 1\n", "old = 7\n")
         .unwrap();
     assert!(
         merged.to_toml_string().contains("#: new = 1\nnew = 7\n"),

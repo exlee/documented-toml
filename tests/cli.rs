@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const DEFAULTS: &str = "#: How many.\ncount = 1\n";
+const DEFAULTS: &str = "##: How many.\ncount = 1\n";
 
 struct Sandbox {
     directory: PathBuf,
@@ -58,7 +58,7 @@ fn merge_writes_the_document_to_stdout() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        "#: How many.\n#: count = 1\ncount = 5\n"
+        "##: How many.\n#: count = 1\ncount = 5\n"
     );
     assert_eq!(fs::read_to_string(&user).unwrap(), "count = 5\n");
 }
@@ -99,7 +99,7 @@ fn in_place_replaces_the_user_file_and_leaves_no_temporary_behind() {
     assert!(output.status.success());
     assert_eq!(
         fs::read_to_string(&user).unwrap(),
-        "#: How many.\n#: count = 1\ncount = 5\n"
+        "##: How many.\n#: count = 1\ncount = 5\n"
     );
     let left_behind: Vec<_> = fs::read_dir(&sandbox.directory)
         .unwrap()

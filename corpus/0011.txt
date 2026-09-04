@@ -1,17 +1,19 @@
-### A line is the tool's when its first non-whitespace characters are exactly
-### the marker and its run of hashes is no longer than the marker's. With the
-### default marker, `#:` is the tool's; `##:` and `#` are the person's.
+### A line carries a marker when its first non-whitespace characters are
+### exactly that marker and its run of hashes is the same length. `##:` is
+### prose and `#:` is TOML text, both the tool's. `####:` and a plain `#` are
+### the person's, and are kept as written.
 --- DEF ---
-#: Documented.
+##: Documented.
 value = 1
 --- USR ---
-##: this looks like a marker but is not
+####: four hashes is not a marker
 #not spaced
-#:also the tool's, so it goes
+##:also the tool's prose, so it goes
+#: value = 0
 value = 2
 --- RES ---
-#: Documented.
+##: Documented.
 #: value = 1
-##: this looks like a marker but is not
+####: four hashes is not a marker
 #not spaced
 value = 2

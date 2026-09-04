@@ -5,11 +5,12 @@
 //! they produce, which is where the behaviour is specified.
 //!
 //! ```
-//! let merged = toml_merge::merge("#: How many.\ncount = 1\n", "count = 7\n")?;
-//! assert_eq!(merged.to_toml_string(), "#: How many.\n#: count = 1\ncount = 7\n");
+//! let merged = toml_merge::merge("##: How many.\ncount = 1\n", "count = 7\n")?;
+//! assert_eq!(merged.to_toml_string(), "##: How many.\n#: count = 1\ncount = 7\n");
 //! # Ok::<(), toml_merge::Error>(())
 //! ```
 
+pub mod anchor;
 pub mod decor;
 pub mod error;
 pub mod merge;
@@ -18,7 +19,11 @@ pub mod path;
 pub mod report;
 pub mod source;
 
-pub use decor::{DEFAULT_MARKER, DefaultEcho, DocBlock, Marker, Prefix, PrefixLine};
+pub use anchor::Anchor;
+pub use decor::{
+    DEFAULT_PROSE_MARKER, DEFAULT_SAMPLE_MARKER, DefaultEcho, DocBlock, Marker, Prefix, PrefixLine,
+    Sample,
+};
 pub use error::Error;
 pub use merge::{MergeEngine, Merged};
 pub use options::{MergeOptions, Migration};

@@ -1,12 +1,12 @@
 ### An array in the person's file replaces the default array entirely.
 ### Elements are not unioned, appended or deduplicated.
 --- DEF ---
-#: Hosts to try, in order.
+##: Hosts to try, in order.
 hosts = ["a", "b"]
 --- USR ---
 hosts = ["c"]
 --- RES ---
-#: Hosts to try, in order.
+##: Hosts to try, in order.
 #: hosts = ["a", "b"]
 hosts = ["c"]
 ### The person's layout of the array survives. Comparison against the default
@@ -18,7 +18,7 @@ hosts = [
   "b",
 ]
 --- RES ---
-#: Hosts to try, in order.
+##: Hosts to try, in order.
 hosts = [
   "a",
   "b",

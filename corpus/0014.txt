@@ -1,0 +1,29 @@
+### Documentation the defaults put after their last key belongs to no key. It
+### reaches the user's file all the same: it is the tool's text, and dropping
+### it loses whatever the defaults had left to say.
+--- DEF ---
+##: The one option.
+option = true
+
+##: Everything else is set in the environment:
+##:   INBOX_TOKEN, INBOX_HOST.
+--- USR ---
+option = false
+--- RES ---
+##: The one option.
+#: option = true
+option = false
+
+##: Everything else is set in the environment:
+##:   INBOX_TOKEN, INBOX_HOST.
+### The person's own notes at the bottom stay below it, as theirs always do.
+--- USR ---
+option = true
+# my own note at the bottom
+--- RES ---
+##: The one option.
+option = true
+
+##: Everything else is set in the environment:
+##:   INBOX_TOKEN, INBOX_HOST.
+# my own note at the bottom

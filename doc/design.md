@@ -47,34 +47,49 @@ effective configuration, because every default key is materialised into it with
 a live value. A caller that needs typed access deserializes the merged document
 and needs no second layering pass.
 
-**Marker** the comment prefix that identifies documentation owned by the tool.
-`#:` by default, configurable.
+**Marker** a comment prefix that identifies text owned by the tool. There are
+two: `##:` for prose and `#:` for TOML text. Both configurable.
 
 **Doc block** the run of marker lines that sits immediately above a key.
 
+**Sample** a `#:` line. It is TOML, not English: the record of a shipped
+default, or an example of an option the defaults ship no value for.
+
+**Anchor** the key a block's first sample line names. It says what the block
+documents, and where the block belongs.
+
+**Standing text** marker lines the defaults keep a blank line away from any
+key, including the text after the last key.
+
 ## 4. The comment convention
 
-Borrowed from kitty's `kitty.conf`. Two kinds of comment coexist in a user's
+Borrowed from kitty's `kitty.conf`. Three kinds of comment coexist in a user's
 file and are told apart by their prefix:
 
 ```toml
-#: Request timeout in seconds.
-#: Values above 300 are clamped.
+##: Request timeout in seconds.
+##: Values above 300 are clamped.
+#: timeout = 30
 # bumped for ticket 44
 timeout = 120
 ```
 
-Lines starting with the marker (`#:`) belong to `toml-merge`. They are rewritten
-from the defaults on every merge and removed when their key leaves the defaults.
-Anything a person writes there is lost on the next merge, which is the price of
-having documentation that stays current.
+Lines starting with `##:` are the tool's prose: the sentences that explain an
+option. Lines starting with `#:` are the tool's TOML text. Both are rewritten
+from the defaults on every merge and removed when their key leaves the
+defaults. Anything a person writes there is lost on the next merge, which is
+the price of having documentation that stays current.
 
 Lines starting with a plain `#` belong to the person. The merge never rewrites,
 reflows or reorders them. They travel with their key.
 
-A line is a marker line when its first non-whitespace characters are exactly the
-marker and the run of `#` is not longer than the marker's. `#:` is a marker
-line; `##:` and `#` are not.
+A line carries a marker when its first non-whitespace characters are exactly
+that marker and its run of `#` is the same length as the marker's. `##:` is
+prose and `#:` is TOML text; `####:` and `#` are the person's.
+
+Prose and TOML text are separated because they are read differently. Prose is
+for the eye. A `#:` line is a line of the file, one the person can uncomment
+and edit, and one the tool can read.
 
 ### 4.1 In the default document
 
@@ -83,17 +98,20 @@ whoever maintains the defaults and never reaches a user's file.
 
 ```toml
 # TODO: revisit before 1.0        <- stays in the defaults
-#: Request timeout in seconds.    <- reaches the user's file
+##: Request timeout in seconds.   <- reaches the user's file
 timeout = 30
 ```
+
+A comment inside a `#:` line is part of the TOML text and travels with it, the
+way any comment inside a sample would.
 
 ### 4.2 Recording the shipped default
 
 When the user's value differs from the shipped default, the merge records the
-default above the key as a marker line:
+default above the key as a sample:
 
 ```toml
-#: Request timeout in seconds.
+##: Request timeout in seconds.
 #: timeout = 30
 timeout = 120
 ```
@@ -102,18 +120,65 @@ The person can see what they departed from without opening the application's
 source. When the value equals the default, or the key was absent and the merge
 inserted it, no such line is written: the live value already is the default.
 
+A generated line takes the sample slot, replacing whatever samples the defaults
+wrote in the same block. A sample for a different option belongs in a block of
+its own, a blank line away.
+
 ### 4.3 Block assembly
 
 The text above a key is rebuilt in this order:
 
-1. blank lines the user had above the block, preserved;
-2. the marker documentation lines from the current defaults;
-3. the marker line recording the shipped default, when the value was overridden;
-4. the user's own `#` lines, in their original order;
-5. the key.
+1. standing text the defaults kept a blank line away from the key, verbatim;
+2. blank lines above the block;
+3. the prose from the current defaults;
+4. the sample: the shipped default when the value was overridden, otherwise
+   whatever samples the defaults wrote;
+5. the user's own `#` lines, in their original order;
+6. the key.
 
 The user's notes sit closest to the key they annotate; the refreshable block
 sits above them.
+
+The blank lines in step 2 are the user's when they wrote any. When they wrote
+none, the blank line the defaults put above the key is used, because that
+separation is part of the shape the defaults give the file and options with a
+paragraph of prose each are unreadable run together.
+
+### 4.4 Anchors
+
+A `#:` line is TOML, so it names a key. The first sample line of a block is its
+anchor: the key the block is about.
+
+```toml
+##: Accounts are written as [[accounts]] blocks:
+##:
+#: [[accounts]]
+#: name = "Personal"
+#: host = "imap.example.com"
+```
+
+Only the first line is read, so a block going on to show several variants of
+the same table, or a value spanning several lines, still anchors. A `[table]`
+or `[[array]]` header names a key from the root; a bare assignment names one in
+the table whose section the block sits in. A block with no sample lines is
+prose and anchors nothing.
+
+An anchor does two things. It says the defaults know about that key, so a
+person who sets it is not warned that the option does not exist. And it says
+where the block belongs: once the person declares the key for real, the block
+travels from wherever the defaults wrote it to sit above what they wrote.
+
+This is how an option the application cannot ship a value for gets documented
+at all. `[[accounts]]` has no sensible default, so the defaults describe it in
+a block anchored on it, and the description arrives above the person's own
+accounts once they have some.
+
+### 4.5 Text after the last key
+
+Marker lines the defaults put after their last key belong to no key. They reach
+the user's file all the same, at the end of it, above whatever the person wrote
+there. A block among them that anchors a key the person declares travels to
+that key like any other.
 
 ## 5. Merge rules
 
@@ -127,6 +192,7 @@ order; the user provides the values.
 | Key in both, types differ | user's item preserved unchanged | `TypeMismatch`, error |
 | Key only in defaults | default's key and value inserted, with docs | nothing |
 | Key only in user file | user's key preserved unchanged, appended | `UnknownKey`, warning |
+| Key only in user file, anchored in defaults | user's key appended, with the anchored block above it | nothing |
 
 ### 5.1 Arrays
 
@@ -220,11 +286,11 @@ written it at the new path.
 ```rust
 pub fn merge(default_src: &str, user_src: &str) -> Result<Merged, Error>;
 
-pub struct MergeOptions { /* marker, migrations */ }
+pub struct MergeOptions { /* markers, migrations */ }
 
 impl MergeOptions {
     pub fn new() -> Self;
-    pub fn marker(self, marker: impl Into<String>) -> Self;
+    pub fn markers(self, prose: impl Into<String>, sample: impl Into<String>) -> Self;
     pub fn migrate(self, from: &str, to: &str) -> Self;
     pub fn merge(&self, default_src: &str, user_src: &str) -> Result<Merged, Error>;
 }
@@ -352,6 +418,8 @@ interrupted run cannot leave a truncated config behind.
 - No element-wise merging of arrays or arrays of tables.
 - No schema, no validation beyond TOML type agreement with the defaults.
 - No preservation of a person's edits to marker lines.
+- A block anchors on one key, the one its first sample line names. A block
+  describing several unrelated options travels to the first of them.
 - A TOML comment beginning with `###` cannot appear inside a corpus file.
 - The merge is not idempotent across a change in the defaults, which is the
   point; it is idempotent when the defaults are unchanged.
@@ -362,3 +430,7 @@ The order within a comment block, marker lines above and user lines directly
 above the key (section 4.3), is a choice. No example so far requires it. Corpus
 file 0004 encodes it and is the single file to change if the opposite order is
 wanted.
+
+Whether an anchored block should still carry its samples once the person has
+declared the key for real is open. It does today, so the reference sits above
+what they wrote. Corpus file 0016 encodes it.

@@ -21,9 +21,10 @@ impl MergeOptions {
         Self::default()
     }
 
-    /// Sets the comment prefix the tool owns.
-    pub fn marker(mut self, marker: impl Into<String>) -> Self {
-        self.marker = Marker::new(marker);
+    /// Sets the two comment prefixes the tool owns: prose first, then the one
+    /// on its TOML text.
+    pub fn markers(mut self, prose: impl Into<String>, sample: impl Into<String>) -> Self {
+        self.marker = Marker::new(prose, sample);
         self
     }
 
@@ -39,9 +40,14 @@ impl MergeOptions {
         self
     }
 
-    /// The marker this merge treats as its own.
-    pub fn marker_text(&self) -> &str {
-        self.marker.as_str()
+    /// The prefix this merge writes prose under.
+    pub fn prose_marker(&self) -> &str {
+        self.marker.prose()
+    }
+
+    /// The prefix this merge writes TOML text under.
+    pub fn sample_marker(&self) -> &str {
+        self.marker.sample()
     }
 
     /// Merges a user document against the defaults.

@@ -1,20 +1,16 @@
 ### The defaults give the shape and the order. The person's file is walked for
 ### values only, so a table they wrote first appears where the defaults declare
-### it.
-###
-### Blank lines belong to the person and travel with their table, so reordering
-### moves them too: `[log]` keeps the blank line it had, `[store]` keeps having
-### none.
+### it, and the blank line the defaults put above it comes along.
 --- DEF ---
-#: Which port.
+##: Which port.
 port = 80
 
-#: Logging.
+##: Logging.
 [log]
-#: How loud.
+##: How loud.
 level = "warn"
 
-#: Storage.
+##: Storage.
 [store]
 path = "/var/lib"
 --- USR ---
@@ -24,15 +20,16 @@ path = "/srv"
 [log]
 level = "debug"
 --- RES ---
-#: Which port.
+##: Which port.
 port = 80
 
-#: Logging.
+##: Logging.
 [log]
-#: How loud.
+##: How loud.
 #: level = "warn"
 level = "debug"
-#: Storage.
+
+##: Storage.
 [store]
 #: path = "/var/lib"
 path = "/srv"

@@ -6,51 +6,97 @@
 
 use toml_edit::Decor;
 
-/// The comment prefix owned by the tool, `#:` by default.
+/// The two comment prefixes the tool owns.
 ///
-/// Lines carrying it are rewritten from the defaults on every merge. Lines
-/// starting with a plain `#` belong to the person and are never touched.
+/// `##:` is prose: the sentences explaining an option. `#:` is TOML text: the
+/// line recording a shipped default, and the samples a defaults author writes
+/// for an option that ships with no live value. Both are rewritten from the
+/// defaults on every merge. A plain `#` belongs to the person and is never
+/// touched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Marker {
-    pub(crate) value: String,
+    pub(crate) prose: String,
+    pub(crate) sample: String,
 }
 
-/// The default marker, used when the caller sets none.
-pub const DEFAULT_MARKER: &str = "#:";
+/// The prose marker, used when the caller sets none.
+pub const DEFAULT_PROSE_MARKER: &str = "##:";
+
+/// The sample marker, used when the caller sets none.
+pub const DEFAULT_SAMPLE_MARKER: &str = "#:";
 
 impl Marker {
-    /// A marker from its literal text, such as `#:`.
-    pub fn new(value: impl Into<String>) -> Self {
+    /// Markers from their literal text.
+    pub fn new(prose: impl Into<String>, sample: impl Into<String>) -> Self {
         Self {
-            value: value.into(),
+            prose: prose.into(),
+            sample: sample.into(),
         }
     }
 
-    /// The marker text.
-    pub fn as_str(&self) -> &str {
-        &self.value
+    /// The prefix on a prose line.
+    pub fn prose(&self) -> &str {
+        &self.prose
     }
 
-    /// Whether a line belongs to the tool.
+    /// The prefix on a line of TOML text.
+    pub fn sample(&self) -> &str {
+        &self.sample
+    }
+
+    /// What one line of a prefix is.
     ///
-    /// It does when its first non-whitespace characters are exactly the marker
-    /// and its run of `#` is no longer than the marker's. With the default
-    /// marker `#:` is a marker line; `##:` and `#` are not.
-    pub fn owns(&self, line: &str) -> bool {
-        let text = line.trim_start();
-        text.starts_with(&self.value) && hashes(text) == hashes(&self.value)
+    /// A line carries a marker when its first non-whitespace characters are
+    /// exactly that marker and its run of `#` is the same length as the
+    /// marker's. With the default markers `##:` is prose and `#:` is a sample;
+    /// `###:` and `#` are the person's.
+    pub fn classify(&self, line: &str) -> PrefixLine {
+        let text = line.to_owned();
+        if line.trim().is_empty() {
+            PrefixLine::Blank { text }
+        } else if carries(&self.prose, line) {
+            PrefixLine::Prose { text }
+        } else if carries(&self.sample, line) {
+            PrefixLine::Sample { text }
+        } else {
+            PrefixLine::User { text }
+        }
     }
 
-    /// The line recording a shipped default, marker included.
+    /// Whether a line is the tool's, of either kind.
+    pub fn owns(&self, line: &str) -> bool {
+        matches!(
+            self.classify(line),
+            PrefixLine::Prose { .. } | PrefixLine::Sample { .. }
+        )
+    }
+
+    /// A sample line with the marker taken off, keeping what follows it so an
+    /// indented sample stays indented.
+    pub fn undress(&self, line: &str) -> String {
+        let text = line.trim_start();
+        let body = text
+            .strip_prefix(&self.sample)
+            .or_else(|| text.strip_prefix(&self.prose))
+            .unwrap_or(text);
+        body.strip_prefix(' ').unwrap_or(body).to_owned()
+    }
+
+    /// The line recording a shipped default.
     fn echo_line(&self, echo: &DefaultEcho) -> String {
-        format!("{} {} = {}", self.value, echo.key, echo.value)
+        format!("{} {} = {}", self.sample, echo.key, echo.value)
     }
 }
 
 impl Default for Marker {
     fn default() -> Self {
-        Self::new(DEFAULT_MARKER)
+        Self::new(DEFAULT_PROSE_MARKER, DEFAULT_SAMPLE_MARKER)
     }
+}
+
+fn carries(marker: &str, line: &str) -> bool {
+    let text = line.trim_start();
+    text.starts_with(marker) && hashes(text) == hashes(marker)
 }
 
 fn hashes(text: &str) -> usize {
@@ -74,6 +120,14 @@ impl Prefix {
         Self { raw }
     }
 
+    /// A prefix from text that is a whole region of its own, such as the
+    /// trailing text at the end of a document.
+    pub fn from_text(text: &str) -> Self {
+        Self {
+            raw: text.to_owned(),
+        }
+    }
+
     /// The complete lines of the prefix, classified.
     ///
     /// The text after the last newline is indentation for the key itself, not a
@@ -83,17 +137,22 @@ impl Prefix {
         parts.pop();
         parts
             .into_iter()
-            .map(|text| {
-                let text = text.to_owned();
-                if text.trim().is_empty() {
-                    PrefixLine::Blank { text }
-                } else if marker.owns(&text) {
-                    PrefixLine::Marker { text }
-                } else {
-                    PrefixLine::User { text }
-                }
-            })
+            .map(|line| marker.classify(line))
             .collect()
+    }
+
+    /// The prefix split at the last blank line.
+    ///
+    /// Everything before it stands on its own, separated from the key by that
+    /// blank line, and is carried across as it was written. What comes after is
+    /// the block that touches the key, which is the block this merge rebuilds.
+    pub fn split(&self, marker: &Marker) -> (Vec<PrefixLine>, Vec<PrefixLine>) {
+        let lines = self.lines(marker);
+        let touching = lines
+            .iter()
+            .rposition(|line| matches!(line, PrefixLine::Blank { .. }))
+            .map_or(0, |at| at + 1);
+        (lines[..touching].to_vec(), lines[touching..].to_vec())
     }
 
     /// The whitespace between the last newline and the key.
@@ -111,8 +170,14 @@ impl Prefix {
 /// does not own can be written back exactly as it was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrefixLine {
-    /// Owned by the tool. Rewritten on every merge.
-    Marker {
+    /// The tool's prose. Rewritten from the defaults on every merge.
+    Prose {
+        /// The line as it appeared, marker included.
+        text: String,
+    },
+    /// The tool's TOML text: a shipped default or a sample. Rewritten on every
+    /// merge, and read as an anchor naming the key it documents.
+    Sample {
         /// The line as it appeared, marker included.
         text: String,
     },
@@ -128,20 +193,48 @@ pub enum PrefixLine {
     },
 }
 
+impl PrefixLine {
+    /// The line as it appeared.
+    pub fn text(&self) -> &str {
+        match self {
+            Self::Prose { text }
+            | Self::Sample { text }
+            | Self::User { text }
+            | Self::Blank { text } => text,
+        }
+    }
+}
+
+/// The TOML text under a key's prose: either the shipped default the merge
+/// records, or the samples the defaults author wrote for an option that ships
+/// with no value of its own.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Sample {
+    /// The key ships no sample and the person has not departed from anything.
+    #[default]
+    None,
+    /// The shipped default, recorded because the person's value differs.
+    Echo(DefaultEcho),
+    /// Sample lines from the defaults, carried across as written.
+    Lines(Vec<String>),
+}
+
 /// One key's rebuilt prefix.
 ///
-/// Rendered in this order: the leading blank lines the user had, the
-/// documentation lines taken from the current defaults, the echo of the shipped
-/// default when the value was overridden, then the user's own comment lines.
-/// The person's notes end up closest to the key they annotate.
+/// Rendered in this order: text the defaults kept a blank line away from the
+/// key, the blank lines above the block, the prose from the current defaults,
+/// the TOML text under it, then the person's own comment lines. The person's
+/// notes end up closest to the key they annotate.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DocBlock {
+    /// Text the defaults separated from the key by a blank line, kept verbatim.
+    pub(crate) floating: Vec<String>,
     /// Blank lines above the block, as [`PrefixLine::Blank`] text.
     pub(crate) leading_blanks: Vec<String>,
-    /// Documentation from the defaults, as [`PrefixLine::Marker`] text.
-    pub(crate) doc_lines: Vec<String>,
-    /// The shipped default, present only when the user's value differs.
-    pub(crate) echo: Option<DefaultEcho>,
+    /// Prose from the defaults, as [`PrefixLine::Prose`] text.
+    pub(crate) prose: Vec<String>,
+    /// The TOML text under the prose.
+    pub(crate) sample: Sample,
     /// The person's own comments, as [`PrefixLine::User`] text.
     pub(crate) user_lines: Vec<String>,
     /// Whitespace before the key itself, taken from whoever supplied the key.
@@ -159,7 +252,7 @@ impl DocBlock {
             match line {
                 PrefixLine::Blank { text } if !seen_content => self.leading_blanks.push(text),
                 PrefixLine::Blank { .. } => {}
-                PrefixLine::Marker { .. } => seen_content = true,
+                PrefixLine::Prose { .. } | PrefixLine::Sample { .. } => seen_content = true,
                 PrefixLine::User { text } => {
                     seen_content = true;
                     self.user_lines.push(text);
@@ -169,34 +262,51 @@ impl DocBlock {
         self.indent = prefix.indent().to_owned();
     }
 
-    /// Takes the documentation lines from a prefix in the default document.
+    /// Takes the prose and the samples from a prefix in the default document.
     /// Plain comments there are notes for whoever maintains the defaults and
     /// never reach a user's file.
-    pub(crate) fn take_docs(&mut self, prefix: &Prefix, marker: &Marker) {
-        self.doc_lines = prefix
-            .lines(marker)
-            .into_iter()
-            .filter_map(|line| match line {
-                PrefixLine::Marker { text } => Some(text),
-                _ => None,
-            })
-            .collect();
+    pub(crate) fn take_docs(&mut self, touching: &[PrefixLine]) {
+        for line in touching {
+            match line {
+                PrefixLine::Prose { text } => self.prose.push(text.clone()),
+                PrefixLine::Sample { text } => match &mut self.sample {
+                    Sample::Lines(lines) => lines.push(text.clone()),
+                    _ => self.sample = Sample::Lines(vec![text.clone()]),
+                },
+                _ => {}
+            }
+        }
     }
 
     /// The prefix text to write back.
     pub(crate) fn render(&self, marker: &Marker) -> String {
         let mut out = String::new();
-        for line in &self.leading_blanks {
+        for line in &self.floating {
             out.push_str(line);
             out.push('\n');
         }
-        for line in &self.doc_lines {
+        if self.floating.is_empty() {
+            for line in &self.leading_blanks {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        for line in &self.prose {
             out.push_str(line);
             out.push('\n');
         }
-        if let Some(echo) = &self.echo {
-            out.push_str(&marker.echo_line(echo));
-            out.push('\n');
+        match &self.sample {
+            Sample::None => {}
+            Sample::Echo(echo) => {
+                out.push_str(&marker.echo_line(echo));
+                out.push('\n');
+            }
+            Sample::Lines(lines) => {
+                for line in lines {
+                    out.push_str(line);
+                    out.push('\n');
+                }
+            }
         }
         for line in &self.user_lines {
             out.push_str(line);
@@ -216,105 +326,4 @@ impl DocBlock {
 pub struct DefaultEcho {
     pub(crate) key: String,
     pub(crate) value: String,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_marker_owns_its_own_lines_only() {
-        let marker = Marker::default();
-        assert!(marker.owns("#: documentation"));
-        assert!(marker.owns("   #: indented"));
-        assert!(marker.owns("#:"));
-        assert!(!marker.owns("# a plain comment"));
-        assert!(!marker.owns("##: one hash too many"));
-        assert!(!marker.owns("value = 1"));
-    }
-
-    #[test]
-    fn a_different_marker_moves_which_lines_are_owned() {
-        let marker = Marker::new("#!");
-        assert!(marker.owns("#! mine"));
-        assert!(!marker.owns("#: not mine"));
-    }
-
-    #[test]
-    fn a_prefix_splits_into_whole_lines_and_the_indentation_after_them() {
-        let prefix = Prefix {
-            raw: "\n#: doc\n# note\n  ".to_owned(),
-        };
-        let marker = Marker::default();
-        assert_eq!(
-            prefix.lines(&marker),
-            vec![
-                PrefixLine::Blank {
-                    text: String::new()
-                },
-                PrefixLine::Marker {
-                    text: "#: doc".to_owned()
-                },
-                PrefixLine::User {
-                    text: "# note".to_owned()
-                },
-            ]
-        );
-        assert_eq!(prefix.indent(), "  ");
-    }
-
-    #[test]
-    fn a_prefix_with_no_newline_is_all_indentation() {
-        let prefix = Prefix {
-            raw: "  ".to_owned(),
-        };
-        assert!(prefix.lines(&Marker::default()).is_empty());
-        assert_eq!(prefix.indent(), "  ");
-    }
-
-    #[test]
-    fn blanks_below_the_first_comment_are_not_kept() {
-        let marker = Marker::default();
-        let mut block = DocBlock::default();
-        block.keep_user_text(
-            &Prefix {
-                raw: "\n\n# note\n\n".to_owned(),
-            },
-            &marker,
-        );
-        assert_eq!(block.leading_blanks.len(), 2);
-        assert_eq!(block.user_lines, ["# note"]);
-    }
-
-    #[test]
-    fn a_block_renders_the_person_closest_to_their_key() {
-        let marker = Marker::default();
-        let block = DocBlock {
-            leading_blanks: vec![String::new()],
-            doc_lines: vec!["#: what it does".to_owned()],
-            echo: Some(DefaultEcho {
-                key: "count".to_owned(),
-                value: "1".to_owned(),
-            }),
-            user_lines: vec!["# why I changed it".to_owned()],
-            indent: String::new(),
-        };
-        assert_eq!(
-            block.render(&marker),
-            "\n#: what it does\n#: count = 1\n# why I changed it\n"
-        );
-    }
-
-    #[test]
-    fn documentation_is_taken_from_the_marker_lines_alone() {
-        let marker = Marker::default();
-        let mut block = DocBlock::default();
-        block.take_docs(
-            &Prefix {
-                raw: "# maintainer note\n#: reaches the user\n".to_owned(),
-            },
-            &marker,
-        );
-        assert_eq!(block.doc_lines, ["#: reaches the user"]);
-    }
 }

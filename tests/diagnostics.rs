@@ -89,7 +89,7 @@ fn a_position_counts_characters_not_bytes() {
 
 #[test]
 fn a_document_the_merge_agrees_with_reports_nothing() {
-    assert!(kinds("#: doc\na = 1\n", "a = 2\n").is_empty());
+    assert!(kinds("##: doc\na = 1\n", "a = 2\n").is_empty());
 }
 
 #[test]

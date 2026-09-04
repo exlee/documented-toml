@@ -1,0 +1,42 @@
+### A block whose first `#:` line names a key documents that key, even where
+### the defaults ship no value for it. That name is the block's anchor: once
+### the person declares the key for real, the block travels to sit above what
+### they wrote, and the key is not reported as one the defaults do not know.
+--- DEF ---
+##: The only declared option.
+declared = 1
+
+##: Accounts are written as [[accounts]] blocks:
+##:
+#: [[accounts]]
+#: name = "Personal"
+#: host = "imap.example.com"
+--- USR ---
+declared = 1
+
+[[accounts]]
+name = "Mine"
+--- RES ---
+##: The only declared option.
+declared = 1
+
+##: Accounts are written as [[accounts]] blocks:
+##:
+#: [[accounts]]
+#: name = "Personal"
+#: host = "imap.example.com"
+
+[[accounts]]
+name = "Mine"
+### With no accounts of their own, the block stays where the defaults put it.
+--- USR ---
+declared = 1
+--- RES ---
+##: The only declared option.
+declared = 1
+
+##: Accounts are written as [[accounts]] blocks:
+##:
+#: [[accounts]]
+#: name = "Personal"
+#: host = "imap.example.com"

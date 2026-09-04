@@ -1,27 +1,28 @@
 ### A key the defaults do not declare is never deleted. It is kept as written
 ### and follows the keys the defaults do declare.
 --- DEF ---
-#: The only option there is.
+##: The only option there is.
 declared = 1
 --- USR ---
 # something I added on purpose
 undeclared = "keep me"
 declared = 2
 --- RES ---
-#: The only option there is.
+##: The only option there is.
 #: declared = 1
 declared = 2
 # something I added on purpose
 undeclared = "keep me"
-### Marker lines above a key that has left the defaults go with it: the tool no
+### The tool's lines above a key that has left the defaults go with it: it no
 ### longer has anything to say about that key.
 --- USR ---
 declared = 1
-#: documentation from a version that declared this
+##: prose from a version that declared this
+#: gone = false
 # my own note
 gone = true
 --- RES ---
-#: The only option there is.
+##: The only option there is.
 declared = 1
 # my own note
 gone = true

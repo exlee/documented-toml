@@ -1,11 +1,12 @@
 ### Comments the person left below the last key belong to no key. They stay
 ### where they are, at the end of the file.
 --- DEF ---
-#: The one option.
+##: The one option.
 option = true
 --- USR ---
 # my notes, at the bottom
 --- RES ---
-#: The one option.
+##: The one option.
 option = true
+
 # my notes, at the bottom

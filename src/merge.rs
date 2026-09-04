@@ -1,8 +1,11 @@
 //! The merge itself: what runs it, and what comes out.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use toml_edit::{ArrayOfTables, Decor, DocumentMut, Item, Key, Table, Value};
 
-use crate::decor::{DefaultEcho, DocBlock, Marker, Prefix};
+use crate::anchor::Anchor;
+use crate::decor::{DefaultEcho, DocBlock, Marker, Prefix, PrefixLine, Sample};
 use crate::options::{MergeOptions, ResolvedMigration};
 use crate::path::DottedPath;
 use crate::report::{Diagnostic, DiagnosticKind, Position, Report, SpanIndex, TomlType};
@@ -53,6 +56,13 @@ pub struct MergeEngine {
     pub(crate) migrations: Vec<ResolvedMigration>,
     pub(crate) spans: SpanIndex,
     pub(crate) report: Report,
+    /// Documentation the defaults anchored on a key they do not declare, and
+    /// the person does. It travels to that key instead of staying where it was
+    /// written.
+    pub(crate) anchored: BTreeMap<DottedPath, Vec<String>>,
+    /// The same blocks by their text, so the walk that emits the defaults'
+    /// standing text can leave out the ones that have travelled.
+    pub(crate) travelled: BTreeSet<String>,
 }
 
 impl MergeEngine {
@@ -72,12 +82,15 @@ impl MergeEngine {
             migrations,
             spans,
             report: Report::default(),
+            anchored: BTreeMap::new(),
+            travelled: BTreeSet::new(),
         }
     }
 
     /// Runs the merge.
     pub(crate) fn run(mut self) -> Merged {
         self.apply_migrations();
+        self.find_anchors();
 
         let empty = Table::new();
         let defaults = self.defaults.root().unwrap_or(&empty).clone();
@@ -89,7 +102,7 @@ impl MergeEngine {
 
         let mut document = DocumentMut::new();
         *document.as_table_mut() = root;
-        document.set_trailing(self.user.trailing().to_owned());
+        document.set_trailing(self.merged_trailing());
 
         Merged {
             report: self.report,
@@ -140,6 +153,88 @@ impl MergeEngine {
         self.migrations = migrations;
     }
 
+    // -- anchors ---------------------------------------------------------
+
+    /// Reads every standing block of the defaults for the key its sample lines
+    /// name, and sets aside the ones naming a key the defaults do not declare
+    /// but the person does. Those travel to that key.
+    fn find_anchors(&mut self) {
+        let Some(defaults) = self.defaults.root().cloned() else {
+            return;
+        };
+        let Some(user) = self.user.root().cloned() else {
+            return;
+        };
+        let mut section = None;
+        self.anchors_in(&defaults, &defaults, &user, None, &mut section);
+
+        let prefix = Prefix::from_text(self.defaults.trailing());
+        let (mut lines, touching) = prefix.split(self.marker());
+        lines.extend(touching);
+        self.anchors_of(&lines, &defaults, &user, section.as_ref());
+    }
+
+    /// Walks the defaults in the order they are written, tracking which table's
+    /// section the text between keys belongs to.
+    fn anchors_in(
+        &mut self,
+        table: &Table,
+        defaults: &Table,
+        user: &Table,
+        within: Option<&DottedPath>,
+        section: &mut Option<DottedPath>,
+    ) {
+        for (name, item) in table.iter() {
+            let Some(key) = table.key(name) else {
+                continue;
+            };
+            let child = child_path(within, name);
+            // A block above a `[table]` header closes the section before it,
+            // so it is read against the table it follows, not the one it
+            // precedes.
+            let reading = match item {
+                Item::Table(sub) if !sub.is_dotted() => section.clone(),
+                Item::ArrayOfTables(_) => section.clone(),
+                _ => within.cloned(),
+            };
+            let (floating, _) = Prefix::of(decor_of(key, item)).split(self.marker());
+            self.anchors_of(&floating, defaults, user, reading.as_ref());
+
+            if let Item::Table(sub) = item {
+                if !sub.is_dotted() {
+                    *section = Some(child.clone());
+                }
+                self.anchors_in(sub, defaults, user, Some(&child), section);
+            }
+        }
+    }
+
+    /// Splits standing text into its blocks and sets aside the ones that travel.
+    fn anchors_of(
+        &mut self,
+        lines: &[PrefixLine],
+        defaults: &Table,
+        user: &Table,
+        within: Option<&DottedPath>,
+    ) {
+        for run in blocks(lines) {
+            let Some(anchor) = Anchor::of(run, self.marker()) else {
+                continue;
+            };
+            let path = anchor.resolve(within);
+            if lookup(defaults, &path).is_some() || lookup(user, &path).is_none() {
+                continue;
+            }
+            let text: Vec<String> = run
+                .iter()
+                .filter(|line| !matches!(line, PrefixLine::User { .. }))
+                .map(|line| line.text().to_owned())
+                .collect();
+            self.travelled.insert(text.join("\n"));
+            self.anchored.insert(path, text);
+        }
+    }
+
     // -- the walk --------------------------------------------------------
 
     fn merge_table(
@@ -172,10 +267,15 @@ impl MergeEngine {
             }
             let user_key = user.key(name).expect("a name iterated has a key");
             let child = child_path(path, name);
-            let at = self.position(&child);
-            self.report
-                .push(Diagnostic::new(DiagnosticKind::UnknownKey, child, at));
-            let (key, item) = self.keep_unknown(user_key, user_item);
+            if !self.anchored.contains_key(&child) {
+                let at = self.position(&child);
+                self.report.push(Diagnostic::new(
+                    DiagnosticKind::UnknownKey,
+                    child.clone(),
+                    at,
+                ));
+            }
+            let (key, item) = self.keep_unknown(user_key, user_item, &child);
             out.insert_formatted(&key, item);
         }
     }
@@ -193,6 +293,7 @@ impl MergeEngine {
         let mut block = self.block(
             decor_of(default_key, default_item),
             decor_of(user_key, user_item),
+            path,
         );
         let expected = TomlType::of(default_item);
         let found = TomlType::of(user_item);
@@ -208,12 +309,12 @@ impl MergeEngine {
             }
             // The person's value stays exactly as they wrote it. Only the block
             // above it is rebuilt, because that text belongs to the tool.
-            block.echo = self.echo(default_key, default_item, None);
+            self.record_default(&mut block, default_key, default_item, None);
             user_item.clone()
         } else {
             match (default_item, user_item) {
                 (Item::Value(_), Item::Value(user_value)) => {
-                    block.echo = self.echo(default_key, default_item, Some(user_value));
+                    self.record_default(&mut block, default_key, default_item, Some(user_value));
                     Item::Value(user_value.clone())
                 }
                 (Item::Table(default_table), Item::Table(user_table)) => {
@@ -237,37 +338,85 @@ impl MergeEngine {
         out.insert_formatted(&key, item);
     }
 
-    /// The doc block for a key present in both documents: the person's blanks
-    /// and comments, the defaults' documentation.
-    fn block(&self, default_decor: &Decor, user_decor: &Decor) -> DocBlock {
+    /// The doc block for a key present in both documents: the defaults' standing
+    /// text and prose, the person's blanks and comments.
+    fn block(&self, default_decor: &Decor, user_decor: &Decor, path: &DottedPath) -> DocBlock {
+        let (floating, touching) = Prefix::of(default_decor).split(self.marker());
         let mut block = DocBlock::default();
         block.keep_user_text(&Prefix::of(user_decor), self.marker());
-        block.take_docs(&Prefix::of(default_decor), self.marker());
+        block.take_docs(&touching);
+        block.floating = self.standing_text(&floating, path);
+        if block.leading_blanks.is_empty() && block.floating.is_empty() {
+            // The person wrote nothing above this key, so the separation the
+            // defaults put there is what keeps the file readable.
+            block.leading_blanks = leading_blanks(&floating, &touching);
+        }
         block
     }
 
-    /// The line recording the shipped default, when the person's value differs
-    /// from it. A value equal to the default needs no echo, and neither does a
-    /// key that has no comparable value at all.
-    fn echo(
+    /// The defaults' text that stands a blank line away from the key, with the
+    /// maintainers' own notes dropped and the blocks that have travelled left
+    /// out. Documentation anchored on this key arrives here.
+    fn standing_text(&self, floating: &[PrefixLine], path: &DottedPath) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for run in blocks_and_blanks(floating) {
+            match run {
+                Standing::Blanks(lines) => out.extend(lines),
+                Standing::Block(lines) => {
+                    let text: Vec<String> = lines
+                        .iter()
+                        .filter(|line| !matches!(line, PrefixLine::User { .. }))
+                        .map(|line| line.text().to_owned())
+                        .collect();
+                    if self.travelled.contains(&text.join("\n")) {
+                        while out.last().is_some_and(|line| line.trim().is_empty()) {
+                            out.pop();
+                        }
+                        continue;
+                    }
+                    out.extend(text);
+                }
+            }
+        }
+        if let Some(arrived) = self.anchored.get(path) {
+            // A blank line on either side, so the block that has travelled
+            // reads as its own thing above the key it came to document.
+            while out.last().is_some_and(|line| line.trim().is_empty()) {
+                out.pop();
+            }
+            out.push(String::new());
+            out.extend(arrived.iter().cloned());
+            out.push(String::new());
+        }
+        if out.iter().all(|line| line.trim().is_empty()) {
+            out.clear();
+        }
+        out
+    }
+
+    /// Records the shipped default above the key when the person's value
+    /// differs from it. A generated line replaces whatever samples the defaults
+    /// wrote for the same key: both occupy the slot under the prose.
+    fn record_default(
         &self,
+        block: &mut DocBlock,
         default_key: &Key,
         default_item: &Item,
         user_value: Option<&Value>,
-    ) -> Option<DefaultEcho> {
+    ) {
         let Item::Value(default_value) = default_item else {
-            return None;
+            return;
         };
         let default_text = rendered(default_value);
         if let Some(user_value) = user_value
             && rendered(user_value) == default_text
         {
-            return None;
+            return;
         }
-        Some(DefaultEcho {
+        block.sample = Sample::Echo(DefaultEcho {
             key: default_key.display_repr().into_owned(),
             value: default_text,
-        })
+        });
     }
 
     // -- keys only on one side -------------------------------------------
@@ -276,12 +425,14 @@ impl MergeEngine {
     /// maintainers' own notes stripped out.
     fn default_entry(&self, key: &Key, item: &Item) -> (Key, Item) {
         let prefix = Prefix::of(decor_of(key, item));
+        let (floating, touching) = prefix.split(self.marker());
         let mut block = DocBlock {
-            leading_blanks: leading_blanks(&prefix, self.marker()),
+            leading_blanks: leading_blanks(&floating, &touching),
             indent: prefix.indent().to_owned(),
             ..DocBlock::default()
         };
-        block.take_docs(&prefix, self.marker());
+        block.take_docs(&touching);
+        block.floating = self.standing_text(&floating, &DottedPath::new(key.get()));
 
         let mut key = key.clone();
         let mut item = self.docs_only(item);
@@ -308,15 +459,6 @@ impl MergeEngine {
         let mut out = Table::new();
         out.set_dotted(table.is_dotted());
         out.set_implicit(table.is_implicit());
-        if !table.is_dotted() {
-            let prefix = Prefix::of(table.decor());
-            let mut block = DocBlock {
-                leading_blanks: leading_blanks(&prefix, self.marker()),
-                ..DocBlock::default()
-            };
-            block.take_docs(&prefix, self.marker());
-            out.decor_mut().set_prefix(block.render(self.marker()));
-        }
         for (name, item) in table.iter() {
             let key = table.key(name).expect("a name iterated has a key");
             let (key, item) = self.default_entry(key, item);
@@ -327,10 +469,12 @@ impl MergeEngine {
 
     /// A key the defaults do not declare. It is never deleted and never
     /// rewritten, but the marker lines above it go: their key has left the
-    /// defaults, so the tool no longer has anything to say about it.
-    fn keep_unknown(&self, key: &Key, item: &Item) -> (Key, Item) {
+    /// defaults, so the tool no longer has anything to say about it. Unless the
+    /// defaults anchored documentation on it, which arrives here.
+    fn keep_unknown(&self, key: &Key, item: &Item, path: &DottedPath) -> (Key, Item) {
         let mut block = DocBlock::default();
         block.keep_user_text(&Prefix::of(decor_of(key, item)), self.marker());
+        block.floating = self.standing_text(&[], path);
 
         let mut key = key.clone();
         let mut item = match item {
@@ -355,10 +499,116 @@ impl MergeEngine {
         *out.decor_mut() = table.decor().clone();
         for (name, item) in table.iter() {
             let key = table.key(name).expect("a name iterated has a key");
-            let (key, item) = self.keep_unknown(key, item);
+            let (key, item) = self.keep_unknown(key, item, &DottedPath::new(name));
             out.insert_formatted(&key, item);
         }
         out
+    }
+
+    // -- the end of the file ---------------------------------------------
+
+    /// The text after the last key belongs to no key, so it is not a doc block.
+    /// The same ownership holds: the tool's lines there come from the defaults,
+    /// and everything else is the person's and is kept as written.
+    fn merged_trailing(&self) -> String {
+        let marker = self.marker();
+        let prefix = Prefix::from_text(self.defaults.trailing());
+        let (mut lines, touching) = prefix.split(marker);
+        lines.extend(touching);
+        let mut docs = self.standing_text(&lines, &DottedPath::new("\u{0}"));
+        // One blank line separates the end of the file from the last key,
+        // whatever the defaults happened to leave above their own trailing text.
+        let first = docs
+            .iter()
+            .position(|line| !line.trim().is_empty())
+            .unwrap_or(docs.len());
+        docs.drain(..first);
+
+        let user = Prefix::from_text(self.user.trailing());
+        let user_lines = user.lines(marker);
+        let first = user_lines
+            .iter()
+            .position(|line| !matches!(line, PrefixLine::Blank { .. }))
+            .unwrap_or(user_lines.len());
+        let mine: Vec<&str> = user_lines[first..]
+            .iter()
+            .filter(|line| !marker.owns(line.text()))
+            .map(PrefixLine::text)
+            .collect();
+
+        let content = docs.iter().any(|line| !line.trim().is_empty())
+            || mine.iter().any(|line| !line.trim().is_empty());
+        if !content {
+            return String::new();
+        }
+
+        let mut out = String::from("\n");
+        for line in docs.iter().map(String::as_str).chain(mine) {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out
+    }
+}
+
+/// The runs of the tool's lines in a stretch of standing text, blank lines
+/// separating one from the next.
+fn blocks(lines: &[PrefixLine]) -> Vec<&[PrefixLine]> {
+    blocks_and_blanks(lines)
+        .into_iter()
+        .filter_map(|run| match run {
+            Standing::Block(lines) => Some(lines),
+            Standing::Blanks(_) => None,
+        })
+        .collect()
+}
+
+enum Standing<'a> {
+    Blanks(Vec<String>),
+    Block(&'a [PrefixLine]),
+}
+
+fn blocks_and_blanks(lines: &[PrefixLine]) -> Vec<Standing<'_>> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < lines.len() {
+        let blank = |line: &PrefixLine| matches!(line, PrefixLine::Blank { .. });
+        if blank(&lines[at]) {
+            let start = at;
+            while at < lines.len() && blank(&lines[at]) {
+                at += 1;
+            }
+            out.push(Standing::Blanks(
+                lines[start..at]
+                    .iter()
+                    .map(|line| line.text().to_owned())
+                    .collect(),
+            ));
+        } else {
+            let start = at;
+            while at < lines.len() && !blank(&lines[at]) {
+                at += 1;
+            }
+            out.push(Standing::Block(&lines[start..at]));
+        }
+    }
+    out
+}
+
+/// The blank lines a key has above it in the defaults, which is what separates
+/// one documented option from the last when the person wrote no blanks of their
+/// own.
+fn leading_blanks(floating: &[PrefixLine], touching: &[PrefixLine]) -> Vec<String> {
+    if !floating.is_empty() && touching.iter().any(|line| !line.text().trim().is_empty()) {
+        return vec![String::new()];
+    }
+    Vec::new()
+}
+
+fn child_path(path: Option<&DottedPath>, name: &str) -> DottedPath {
+    match path {
+        Some(path) => path.child(name),
+        None => DottedPath::new(name),
     }
 }
 
@@ -396,19 +646,6 @@ fn set_prefix(key: &mut Key, item: &mut Item, prefix: String) {
             key.leaf_decor_mut().set_prefix(prefix);
         }
     }
-}
-
-fn child_path(path: Option<&DottedPath>, name: &str) -> DottedPath {
-    match path {
-        Some(path) => path.child(name),
-        None => DottedPath::new(name),
-    }
-}
-
-fn leading_blanks(prefix: &Prefix, marker: &Marker) -> Vec<String> {
-    let mut block = DocBlock::default();
-    block.keep_user_text(prefix, marker);
-    block.leading_blanks
 }
 
 /// A value's text with every scrap of formatting whitespace removed, which is
@@ -472,7 +709,7 @@ fn renumber_tables(table: &mut Table, next: &mut isize) {
     }
 }
 
-// -- path navigation, for migrations ------------------------------------
+// -- path navigation, for migrations and anchors ------------------------
 
 fn lookup<'t>(root: &'t Table, path: &DottedPath) -> Option<&'t Item> {
     let mut table = root;

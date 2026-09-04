@@ -1,0 +1,35 @@
+### The blank line the defaults put between two documented options is part of
+### the shape they give the file, so a person whose file has no blank there
+### gets one. Without it, options with a paragraph of prose each run together.
+--- DEF ---
+##: The first option, with a paragraph of its own.
+first = 1
+
+##: The second, kept apart from the first.
+second = 2
+--- USR ---
+first = 9
+second = 8
+--- RES ---
+##: The first option, with a paragraph of its own.
+#: first = 1
+first = 9
+
+##: The second, kept apart from the first.
+#: second = 2
+second = 8
+### Blank lines the person did write are theirs, and are preserved exactly.
+--- USR ---
+first = 9
+
+
+second = 8
+--- RES ---
+##: The first option, with a paragraph of its own.
+#: first = 1
+first = 9
+
+
+##: The second, kept apart from the first.
+#: second = 2
+second = 8
