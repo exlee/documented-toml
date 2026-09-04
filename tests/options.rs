@@ -1,6 +1,6 @@
 //! The marker, the documents the merge refuses, and what comes out of a merge.
 
-use toml_merge::{DEFAULT_PROSE_MARKER, DEFAULT_SAMPLE_MARKER, Error, MergeOptions, merge};
+use documented_toml::{DEFAULT_PROSE_MARKER, DEFAULT_SAMPLE_MARKER, Error, MergeOptions, merge};
 
 #[test]
 fn the_default_markers_are_the_documented_ones() {

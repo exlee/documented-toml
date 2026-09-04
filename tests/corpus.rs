@@ -229,7 +229,7 @@ impl CorpusFile {
 
 impl Case {
     fn run(&self, default_src: &str) -> CaseOutcome {
-        let merged = toml_merge::merge(default_src, &self.user_src)
+        let merged = documented_toml::merge(default_src, &self.user_src)
             .expect("a corpus case parses on both sides");
         let actual = merged.to_toml_string();
         CaseOutcome {
@@ -243,7 +243,7 @@ impl Case {
     /// makes it safe to run on every start-up.
     fn run_again(&self, default_src: &str, once: &str) -> CaseOutcome {
         let merged =
-            toml_merge::merge(default_src, once).expect("merged output parses as TOML again");
+            documented_toml::merge(default_src, once).expect("merged output parses as TOML again");
         let actual = merged.to_toml_string();
         CaseOutcome {
             passed: actual == once,

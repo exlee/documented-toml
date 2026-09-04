@@ -1,6 +1,6 @@
 //! Rename rules: what they move, when they decline to, and what they report.
 
-use toml_merge::{DiagnosticKind, DottedPath, MergeOptions};
+use documented_toml::{DiagnosticKind, DottedPath, MergeOptions};
 
 #[test]
 fn a_rule_moves_a_value_to_its_new_path() {

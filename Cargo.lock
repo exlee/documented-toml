@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "documented-toml"
+version = "0.1.0"
+dependencies = [
+ "nonempty",
+ "toml_edit",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -83,14 +91,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "toml-merge"
-version = "0.1.0"
-dependencies = [
- "nonempty",
- "toml_edit",
 ]
 
 [[package]]

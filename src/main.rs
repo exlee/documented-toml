@@ -1,8 +1,8 @@
-//! The `toml-merge` command.
+//! The `documented-toml` command.
 //!
 //! ```text
-//! toml-merge merge --default D.toml --user U.toml [--in-place | --output OUT]
-//! toml-merge check --default D.toml --user U.toml
+//! documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+//! documented-toml check --default D.toml --user U.toml
 //! ```
 
 use std::fs;
@@ -10,12 +10,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use toml_merge::{MergeOptions, Merged};
+use documented_toml::{MergeOptions, Merged};
 
 const USAGE: &str = "\
 usage:
-  toml-merge merge --default D.toml --user U.toml [--in-place | --output OUT]
-  toml-merge check --default D.toml --user U.toml
+  documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+  documented-toml check --default D.toml --user U.toml
 
   merge  writes the merged document, to stdout unless --output or --in-place
   check  writes nothing
@@ -27,7 +27,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
         Err(message) => {
-            eprintln!("toml-merge: {message}");
+            eprintln!("documented-toml: {message}");
             ExitCode::from(2)
         }
     }
@@ -95,7 +95,7 @@ fn replace(target: &Path, text: &str) -> Result<(), String> {
         .ok_or_else(|| format!("{}: not a file", target.display()))?;
     let mut temporary = target.to_path_buf();
     temporary.set_file_name(format!(
-        ".{}.toml-merge.{}",
+        ".{}.documented-toml.{}",
         name.to_string_lossy(),
         std::process::id()
     ));

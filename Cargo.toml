@@ -1,14 +1,24 @@
 [package]
-name = "toml-merge"
+name = "documented-toml"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+description = "Format-preserving merge of a person's TOML configuration with the documented defaults an application ships."
+documentation = "https://docs.rs/documented-toml"
+repository = "https://github.com/exlee/documented-toml"
+homepage = "https://github.com/exlee/documented-toml"
+readme = "README.md"
+license = "X11"
+keywords = ["toml", "config", "merge", "comments", "defaults"]
+categories = ["config", "parser-implementations", "command-line-utilities"]
+exclude = [".DS_Store", "__journal/**"]
 
 [lib]
-name = "toml_merge"
+name = "documented_toml"
 path = "src/lib.rs"
 
 [[bin]]
-name = "toml-merge"
+name = "documented-toml"
 path = "src/main.rs"
 
 [dependencies]

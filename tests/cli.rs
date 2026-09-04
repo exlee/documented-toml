@@ -1,4 +1,4 @@
-//! The `toml-merge` command, run as a person would run it.
+//! The `documented-toml` command, run as a person would run it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ struct Sandbox {
 impl Sandbox {
     fn new(name: &str) -> Self {
         let directory =
-            std::env::temp_dir().join(format!("toml-merge-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("documented-toml-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&directory);
         fs::create_dir_all(&directory).expect("a writable temporary directory");
         Self { directory }
@@ -26,7 +26,7 @@ impl Sandbox {
     }
 
     fn run(&self, args: &[&Path]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_toml-merge"))
+        Command::new(env!("CARGO_BIN_EXE_documented-toml"))
             .args(args)
             .output()
             .expect("the binary runs")
@@ -180,7 +180,7 @@ fn a_missing_file_is_reported_and_nothing_is_written() {
     ]);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("toml-merge:"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("documented-toml:"));
 }
 
 #[test]

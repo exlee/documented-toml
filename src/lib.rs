@@ -1,14 +1,11 @@
-//! Format-preserving merge of a user's TOML configuration with the defaults an
-//! application ships.
+//! Format-preserving merge of a person's TOML configuration with the documented
+//! defaults an application ships.
 //!
-//! See `doc/design.md` for the merge rules and `corpus/` for the merge output
-//! they produce, which is where the behaviour is specified.
-//!
-//! ```
-//! let merged = toml_merge::merge("##: How many.\ncount = 1\n", "count = 7\n")?;
-//! assert_eq!(merged.to_toml_string(), "##: How many.\n#: count = 1\ncount = 7\n");
-//! # Ok::<(), toml_merge::Error>(())
-//! ```
+//! The crate documentation is the README, so its examples are compiled and run
+//! with the rest of the tests. `doc/design.md` states the merge rules and
+//! `corpus/` holds the output they produce, which is where the behaviour is
+//! specified.
+#![doc = include_str!("../README.md")]
 
 pub mod decor;
 pub mod error;

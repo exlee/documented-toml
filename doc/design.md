@@ -1,8 +1,8 @@
-# toml-merge design
+# documented-toml design
 
 ## 1. Purpose
 
-`toml-merge` reconciles two TOML documents:
+`documented-toml` reconciles two TOML documents:
 
 - the **defaults**: the configuration an application ships, with documentation
   written alongside each option;
@@ -32,7 +32,7 @@ options".
 
 `toml_edit` provides the piece both of those lack: a document object model that
 retains the original text of everything it did not change. It is the foundation
-here. `toml-merge` adds the merge policy, the documentation-comment convention,
+here. `documented-toml` adds the merge policy, the documentation-comment convention,
 and the report.
 
 ## 3. Vocabulary
@@ -492,8 +492,8 @@ The corpus is for merge output only.
 ## 12. Command line
 
 ```
-toml-merge merge --default D.toml --user U.toml [--in-place | --output OUT]
-toml-merge check --default D.toml --user U.toml
+documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+documented-toml check --default D.toml --user U.toml
 ```
 
 `merge` writes the merged document and prints diagnostics to stderr. `check`

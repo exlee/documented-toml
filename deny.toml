@@ -1,4 +1,4 @@
-# cargo-deny configuration for toml-merge.
+# cargo-deny configuration for documented-toml.
 #
 # Usage:
 #   cargo install cargo-deny --locked
@@ -8,12 +8,12 @@
 # dependency tree: every crate must be permissively licensed. Copyleft
 # (AGPL/GPL/LGPL/SSPL) is not acceptable anywhere in the tree; a new
 # dependency under any license not listed below fails
-# `cargo deny check licenses`, so copyleft cannot sneak in unnoticed.
-# The single reviewed exception is option-ext (MPL-2.0), see below.
+# `cargo deny check licenses`, so copyleft cannot enter unnoticed.
 
 [graph]
-# toml-merge targets macOS today; Linux and Windows are planned, so the full
-# cross-platform tree is license-checked up front (windows-sys, wasi, ...).
+# The crate is pure Rust with no platform-specific dependency, and is meant to
+# build anywhere. The tree is license-checked on all three tiers so a future
+# dependency that pulls in windows-sys or wasi is caught on arrival.
 targets = [
     { triple = "aarch64-apple-darwin" },
     { triple = "x86_64-unknown-linux-gnu" },
@@ -28,13 +28,13 @@ ignore = []
 
 [licenses]
 # SPDX identifiers covering every crate in Cargo.lock as of the audit:
-# - MIT / Apache-2.0: the Rust ecosystem default (serde, toml, rusqlite,
-#   imap, native-tls, chrono, ...)
-# - Apache-2.0 WITH LLVM-exception: wasi
-# - 0BSD: mailparse, quoted_printable
-# - Zlib / BSD-3-Clause / ISC / Unlicense / Unicode-3.0: assorted OR-arms
-#   and small leaves (libsqlite3-sys bundles, memchr, unicode-ident, ...)
+# - X11: documented-toml itself
+# - MIT / Apache-2.0: the whole dependency tree today (nonempty, toml_edit
+#   and the toml_* / winnow / indexmap crates under it)
+# - the remaining identifiers are allowed ahead of need, so a small
+#   permissively licensed leaf does not fail the check on arrival
 allow = [
+    "X11",
     "MIT",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
@@ -50,20 +50,9 @@ allow = [
 # this threshold only matters if a future crate ships bare LICENSE files.
 confidence-threshold = 0.93
 
-# Reviewed copyleft exception, scoped to the one crate — MPL-2.0 stays
-# rejected for any other dependency.
-exceptions = [
-    # option-ext (via dirs -> dirs-sys): MPL-2.0 is file-level copyleft; using
-    # the crate unmodified in a binary imposes no obligations on our code.
-    # Dropping the `dirs` dependency (only used for home_dir lookup) removes
-    # this exception if it ever becomes unacceptable.
-    { crate = "option-ext", allow = ["MPL-2.0"] },
-]
-
-[licenses.private]
-# The toml-merge crate is `publish = false` (an application, not a library), so
-# it is skipped here and only external dependencies are license-checked.
-ignore = true
+# No copyleft exception is in force. Any crate needing one gets an entry here
+# with the reason it was reviewed and accepted.
+exceptions = []
 
 [bans]
 multiple-versions = "warn"
@@ -74,8 +63,8 @@ highlight = "all"
 #
 # Three legitimate crates had a malicious version published from a compromised
 # publish path; all three were pulled by crates.io the same morning. The
-# impostor crates below are denied at every version — none of them is
-# legitimate — so a typosquat cannot enter the tree unnoticed either.
+# impostor crates below are denied at every version. None of them is
+# legitimate, so a typosquat cannot enter the tree unnoticed either.
 # Exact-pinned so a future fixed release on the same minor line still resolves.
 # Mirrors ~/.config/cargo-deny/deny.toml.
 # ---------------------------------------------------------------------------

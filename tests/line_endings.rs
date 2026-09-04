@@ -4,7 +4,7 @@
 //! so without this a file written with `\r\n` comes back rewritten from top to
 //! bottom, every line of it, including the person's own comments.
 
-use toml_merge::{Newline, merge};
+use documented_toml::{Newline, merge};
 
 #[test]
 fn a_file_written_with_crlf_comes_back_with_crlf() {

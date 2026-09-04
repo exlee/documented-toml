@@ -3,7 +3,7 @@
 //! Merge output is specified by `corpus/`; these are the observations that
 //! travel alongside it.
 
-use toml_merge::{DiagnosticKind, Severity, TomlType, merge};
+use documented_toml::{DiagnosticKind, Severity, TomlType, merge};
 
 fn kinds(default_src: &str, user_src: &str) -> Vec<DiagnosticKind> {
     merge(default_src, user_src)
