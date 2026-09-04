@@ -174,7 +174,8 @@ impl MergeEngine {
             self.merge_optional(&optional, &mut done, user, out, path, Some(&child));
             match user.get_key_value(name) {
                 None => {
-                    let (key, item) = self.default_entry(default_key, default_item, &child);
+                    let first = out.is_empty();
+                    let (key, item) = self.default_entry(default_key, default_item, &child, first);
                     out.insert_formatted(&key, item);
                 }
                 Some((user_key, user_item)) => {
@@ -337,11 +338,12 @@ impl MergeEngine {
         out: &mut Table,
         path: &DottedPath,
     ) {
+        let first = out.is_empty();
         let mut block = self.block(
             decor_of(default_key, default_item),
             decor_of(user_key, user_item),
         );
-        self.flush_pending(&mut block);
+        self.flush_pending(&mut block, first);
         let expected = TomlType::of(default_item);
         let found = TomlType::of(user_item);
 
@@ -386,11 +388,18 @@ impl MergeEngine {
     }
 
     /// Moves any optional keys waiting to be written above whatever comes next.
-    fn flush_pending(&mut self, block: &mut DocBlock) {
+    ///
+    /// `first` says the block opens its table, where there is nothing to be set
+    /// apart from. Anywhere else the waiting lines are separated from the key
+    /// above them, the way the defaults separated them.
+    fn flush_pending(&mut self, block: &mut DocBlock, first: bool) {
         if self.pending.is_empty() {
             return;
         }
         let mut waiting = std::mem::take(&mut self.pending);
+        if !first {
+            waiting.insert(0, String::new());
+        }
         waiting.push(String::new());
         waiting.append(&mut block.floating);
         block.floating = waiting;
@@ -471,7 +480,17 @@ impl MergeEngine {
 
     /// A key the person does not have yet, taken from the defaults with the
     /// maintainers' own notes stripped out.
-    fn default_entry(&self, key: &Key, item: &Item, path: &DottedPath) -> (Key, Item) {
+    ///
+    /// Optional keys waiting to be written arrive here too. The block above a
+    /// key is where the defaults put it, and that is where it goes, whether or
+    /// not the person has written the key it belongs above.
+    fn default_entry(
+        &mut self,
+        key: &Key,
+        item: &Item,
+        path: &DottedPath,
+        first: bool,
+    ) -> (Key, Item) {
         let prefix = Prefix::of(decor_of(key, item));
         let (floating, touching) = prefix.split(self.marker());
         let mut block = DocBlock {
@@ -481,6 +500,7 @@ impl MergeEngine {
         };
         block.take_docs(&touching);
         block.floating = self.standing_text(&floating);
+        self.flush_pending(&mut block, first);
 
         let mut key = key.clone();
         let mut item = self.docs_only(item, path);
@@ -489,13 +509,17 @@ impl MergeEngine {
     }
 
     /// The same stripping, applied through a table or an array of tables.
-    fn docs_only(&self, item: &Item, path: &DottedPath) -> Item {
+    ///
+    /// An array of tables documents its first entry, which is where a person
+    /// reads what the rest may hold, so the optional keys are due there and in
+    /// no entry after it.
+    fn docs_only(&mut self, item: &Item, path: &DottedPath) -> Item {
         match item {
-            Item::Table(table) => Item::Table(self.docs_only_table(table, path)),
+            Item::Table(table) => Item::Table(self.docs_only_table(table, path, true)),
             Item::ArrayOfTables(array) => {
                 let mut out = ArrayOfTables::new();
-                for entry in array.iter() {
-                    out.push(self.docs_only_table(entry, path));
+                for (index, entry) in array.iter().enumerate() {
+                    out.push(self.docs_only_table(entry, path, index == 0));
                 }
                 Item::ArrayOfTables(out)
             }
@@ -503,13 +527,24 @@ impl MergeEngine {
         }
     }
 
-    fn docs_only_table(&self, table: &Table, path: &DottedPath) -> Table {
+    /// The keys of a table the person has not written.
+    ///
+    /// `documented` walks it as a merge against an empty table, so the keys the
+    /// defaults document without declaring are written out at the point in the
+    /// order they were written. A person who has not opened a section still
+    /// reads what it may hold.
+    fn docs_only_table(&mut self, table: &Table, path: &DottedPath, documented: bool) -> Table {
         let mut out = Table::new();
         out.set_dotted(table.is_dotted());
         out.set_implicit(table.is_implicit());
+        if documented {
+            self.merge_table(table, &Table::new(), &mut out, Some(path));
+            return out;
+        }
         for (name, item) in table.iter() {
             let key = table.key(name).expect("a name iterated has a key");
-            let (key, item) = self.default_entry(key, item, &path.child(name));
+            let first = out.is_empty();
+            let (key, item) = self.default_entry(key, item, &path.child(name), first);
             out.insert_formatted(&key, item);
         }
         out

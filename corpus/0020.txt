@@ -1,0 +1,89 @@
+### A block belongs above the key the defaults wrote it above, and goes there
+### whether or not the person has written that key. A person who has left a
+### section alone, or has never opened the file, still reads what it may hold.
+--- DEF ---
+##: The first declared option.
+first = 1
+
+##: How accounts are written:
+#: [[accounts]]
+#: name = "Personal"
+
+##: The second declared option.
+second = 2
+--- USR ---
+first = 9
+--- RES ---
+##: The first declared option.
+#: first = 1
+first = 9
+
+##: How accounts are written:
+#: [[accounts]]
+#: name = "Personal"
+
+##: The second declared option.
+second = 2
+### The same file with nothing written in it at all. The order is the order the
+### defaults gave, optional keys included.
+--- USR ---
+--- RES ---
+##: The first declared option.
+first = 1
+
+##: How accounts are written:
+#: [[accounts]]
+#: name = "Personal"
+
+##: The second declared option.
+second = 2
+### A table the person has not written carries every key documented inside it,
+### the declared ones and the documented ones alike.
+--- DEF ---
+[general]
+##: The one declared option.
+a = 1
+
+##: Set it and the built-in editor is not used.
+#: editor = "kak"
+
+[ui]
+##: The theme the windows are drawn in.
+theme = "dark"
+--- USR ---
+[ui]
+theme = "light"
+--- RES ---
+[general]
+##: The one declared option.
+a = 1
+
+##: Set it and the built-in editor is not used.
+#: editor = "kak"
+
+[ui]
+##: The theme the windows are drawn in.
+#: theme = "dark"
+theme = "light"
+### Set, it merges like any other key, in the place its block was written.
+--- USR ---
+[general]
+a = 9
+editor = "hx"
+
+[ui]
+theme = "light"
+--- RES ---
+[general]
+##: The one declared option.
+#: a = 1
+a = 9
+
+##: Set it and the built-in editor is not used.
+#: editor = "kak"
+editor = "hx"
+
+[ui]
+##: The theme the windows are drawn in.
+#: theme = "dark"
+theme = "light"
