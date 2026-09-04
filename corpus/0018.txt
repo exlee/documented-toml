@@ -1,11 +1,13 @@
 ### A block ends where the next anchor begins. A `#:` line opening a table
 ### header names a key of its own, so what follows documents that key and not
 ### the last one, and the prose written directly above the header introduces
-### it. One stretch of documentation for a whole nested shape is therefore
-### several blocks, and each travels to the key it names.
+### it. Each block is read against the section the headers before it opened,
+### the way a file of its own would be, so a bare assignment after a header
+### lands inside it.
 ###
-### The marker line a block ends on separated it from the next block. Arriving
-### at its key it has nothing left to separate from, so it is left off.
+### Each key then goes where it belongs: set, above the person's own value;
+### unset, left as the `#:` lines it was written as, at the point in the shape
+### the defaults gave it.
 --- DEF ---
 ##: The only declared option.
 declared = 1
@@ -33,24 +35,19 @@ host = "smtp.mine.com"
 declared = 1
 
 ##: How a source is written:
-#: [[source]]
-#: name = "example"
-
 [[source]]
+#: name = "example"
 name = "mine"
-
-##: Where answers go.
-#: [source.outgoing]
-#: host = "smtp.example.com"
-
-[source.outgoing]
-host = "smtp.mine.com"
 
 #: [source.incoming]
 #: host = "imap.example.com"
-#:
-### With none of it declared, every block stays where the defaults wrote it,
-### in one piece.
+
+##: Where answers go.
+[source.outgoing]
+#: host = "smtp.example.com"
+host = "smtp.mine.com"
+### With none of it set, every block stays as written, in the order the
+### defaults gave.
 --- USR ---
 declared = 1
 --- RES ---
@@ -60,10 +57,10 @@ declared = 1
 ##: How a source is written:
 #: [[source]]
 #: name = "example"
-#:
+
 #: [source.incoming]
 #: host = "imap.example.com"
-#:
+
 ##: Where answers go.
 #: [source.outgoing]
 #: host = "smtp.example.com"

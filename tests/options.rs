@@ -33,10 +33,9 @@ fn with_different_markers_the_old_ones_are_the_persons_text() {
 }
 
 #[test]
-fn a_sample_for_an_option_with_no_value_stays_commented_out() {
-    // `optional` is documented but ships no value, so its block stays as
-    // written. `declared` ships one, and the person's departure is recorded
-    // under its own prose.
+fn an_optional_key_the_person_has_not_set_stays_commented_out() {
+    // `optional` is documented but ships no value. It keeps the place in the
+    // order the defaults gave it, above `declared`.
     let merged = merge(
         "##: What it does.\n#: optional = \"never set\"\n\ndeclared = 1\n",
         "declared = 2\n",
@@ -49,17 +48,66 @@ fn a_sample_for_an_option_with_no_value_stays_commented_out() {
 }
 
 #[test]
-fn a_key_the_defaults_anchor_documentation_on_is_not_unknown() {
+fn an_optional_key_the_person_has_set_merges_like_any_other() {
+    // The `#:` line is the default, written by hand because there is no live
+    // value to take one from. Set, it is recorded above the person's value.
     let merged = merge(
-        "declared = 1\n\n##: How accounts are written:\n#: [[accounts]]\n#: name = \"Personal\"\n",
-        "declared = 1\n\n[[accounts]]\nname = \"Mine\"\n",
+        "##: This value is counter\ncounter = 1\n\n##: Optional counter\n#: optional_counter = 1\n",
+        "counter = 3\noptional_counter = 5\n",
+    )
+    .unwrap();
+    assert_eq!(
+        merged.to_toml_string(),
+        "##: This value is counter\n#: counter = 1\ncounter = 3\n\n##: Optional counter\n#: optional_counter = 1\noptional_counter = 5\n"
+    );
+    assert!(merged.report.diagnostics().is_empty());
+}
+
+#[test]
+fn a_documented_key_is_not_an_unknown_one() {
+    // The blank line matters: a sample glued to a key is that key's recorded
+    // default, so a sample for a different option stands on its own.
+    let merged = merge(
+        "#: optional = 1\n\ndeclared = 1\n",
+        "declared = 1\noptional = 2\n",
     )
     .unwrap();
     assert!(merged.report.diagnostics().is_empty());
+}
+
+#[test]
+fn a_template_is_merged_into_what_the_person_wrote() {
+    let defaults = "##: How a source is written:\n#: [[source]]\n#: name = \"example\"\n#: host = \"imap.example.com\"\n";
+    let user = "[[source]]\nname = \"mine\"\n";
+    let merged = MergeOptions::new().merge(defaults, user).unwrap();
+    let text = merged.to_toml_string();
+    // The header becomes the real one, the key the person set carries its
+    // recorded default, and the one they did not stays a sample.
     assert!(
-        merged
-            .to_toml_string()
-            .contains("#: name = \"Personal\"\n\n[[accounts]]"),
+        text.contains("##: How a source is written:\n[[source]]"),
+        "{text}"
+    );
+    assert!(
+        text.contains("#: name = \"example\"\nname = \"mine\""),
+        "{text}"
+    );
+    assert!(text.contains("#: host = \"imap.example.com\""), "{text}");
+    assert!(
+        !text.contains("\nhost = \"imap"),
+        "host must not be materialised:\n{text}"
+    );
+}
+
+#[test]
+fn a_path_reaches_through_an_array_of_tables_to_find_a_key() {
+    // `source.outgoing` names the `outgoing` table of a `[[source]]` entry.
+    let defaults = "##: Where answers go.\n#: [source.outgoing]\n#: host = \"smtp.example.com\"\n";
+    let user = "[[source]]\nname = \"mine\"\n\n[source.outgoing]\nhost = \"smtp.mine.com\"\n";
+    let merged = MergeOptions::new().merge(defaults, user).unwrap();
+    assert!(
+        merged.to_toml_string().contains(
+            "##: Where answers go.\n[source.outgoing]\n#: host = \"smtp.example.com\"\nhost = \"smtp.mine.com\""
+        ),
         "{}",
         merged.to_toml_string()
     );
@@ -114,50 +162,6 @@ fn every_default_key_is_materialised_with_a_live_value() {
 }
 
 #[test]
-fn each_block_of_a_nested_shape_reaches_its_own_key() {
-    let defaults = "##: How a source is written:\n#: [[source]]\n#: name = \"example\"\n#:\n#: [source.outgoing]\n#: host = \"smtp.example.com\"\n";
-    let user = "[[source]]\nname = \"mine\"\n\n[source.outgoing]\nhost = \"smtp.mine.com\"\n";
-    let merged = MergeOptions::new().merge(defaults, user).unwrap();
-    let text = merged.to_toml_string();
-    assert!(
-        text.contains("#: name = \"example\"\n\n[[source]]"),
-        "the source block did not reach [[source]]:\n{text}"
-    );
-    assert!(
-        text.contains("#: host = \"smtp.example.com\"\n\n[source.outgoing]"),
-        "the outgoing block did not reach [source.outgoing]:\n{text}"
-    );
-    assert!(merged.report.diagnostics().is_empty());
-}
-
-#[test]
-fn a_block_naming_a_key_nobody_declares_stays_where_it_was_written() {
-    let defaults = "##: How a source is written:\n#: [[source]]\n#: name = \"example\"\n#:\n#: [source.incoming]\n#: host = \"imap.example.com\"\n";
-    let user = "[[source]]\nname = \"mine\"\n";
-    let merged = MergeOptions::new().merge(defaults, user).unwrap();
-    let text = merged.to_toml_string();
-    assert!(
-        text.trim_end().ends_with("#: host = \"imap.example.com\""),
-        "the incoming block should have stayed at the end:\n{text}"
-    );
-}
-
-#[test]
-fn a_path_reaches_through_an_array_of_tables_to_find_a_key() {
-    // `source.outgoing` names the `outgoing` table of a `[[source]]` entry.
-    let defaults = "##: Where answers go.\n#: [source.outgoing]\n#: host = \"smtp.example.com\"\n";
-    let user = "[[source]]\nname = \"mine\"\n\n[source.outgoing]\nhost = \"smtp.mine.com\"\n";
-    let merged = MergeOptions::new().merge(defaults, user).unwrap();
-    assert!(
-        merged
-            .to_toml_string()
-            .contains("##: Where answers go.\n#: [source.outgoing]\n#: host = \"smtp.example.com\"\n\n[source.outgoing]"),
-        "{}",
-        merged.to_toml_string()
-    );
-}
-
-#[test]
 fn defaults_of_documentation_alone_are_a_configuration() {
     // The application ships no value for `source`, and cannot: the block
     // anchored on it is the whole of what the defaults have to say.
@@ -171,5 +175,18 @@ fn defaults_of_documentation_alone_are_a_configuration() {
         merged
             .to_toml_string()
             .contains("##: How a source is written:")
+    );
+}
+
+#[test]
+fn a_block_naming_a_key_nobody_sets_stays_where_it_was_written() {
+    let defaults = "declared = 1\n\n#: [[source]]\n#: name = \"example\"\n";
+    let merged = merge(defaults, "declared = 1\n").unwrap();
+    assert!(
+        merged
+            .to_toml_string()
+            .ends_with("#: [[source]]\n#: name = \"example\"\n"),
+        "{}",
+        merged.to_toml_string()
     );
 }

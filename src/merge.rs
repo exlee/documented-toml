@@ -1,15 +1,15 @@
 //! The merge itself: what runs it, and what comes out.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use toml_edit::{ArrayOfTables, Decor, DocumentMut, Item, Key, Table, Value};
 
-use crate::anchor::Anchor;
 use crate::decor::{DefaultEcho, DocBlock, Marker, Prefix, PrefixLine, Sample};
 use crate::options::{MergeOptions, ResolvedMigration};
 use crate::path::DottedPath;
 use crate::report::{Diagnostic, DiagnosticKind, Position, Report, SpanIndex, TomlType};
 use crate::source::SourceDocument;
+use crate::template::{Template, comment_out};
 
 /// The merged document and its report.
 ///
@@ -56,13 +56,11 @@ pub struct MergeEngine {
     pub(crate) migrations: Vec<ResolvedMigration>,
     pub(crate) spans: SpanIndex,
     pub(crate) report: Report,
-    /// Documentation the defaults anchored on a key they do not declare, and
-    /// the person does. It travels to that key instead of staying where it was
-    /// written.
-    pub(crate) anchored: BTreeMap<DottedPath, Vec<String>>,
-    /// The same blocks by their text, so the walk that emits the defaults'
-    /// standing text can leave out the ones that have travelled.
-    pub(crate) travelled: BTreeSet<String>,
+    /// The keys the defaults document without declaring.
+    pub(crate) template: Template,
+    /// Optional keys the person has not set, written back as `#:` lines and
+    /// waiting for something to sit above.
+    pub(crate) pending: Vec<String>,
 }
 
 impl MergeEngine {
@@ -82,15 +80,15 @@ impl MergeEngine {
             migrations,
             spans,
             report: Report::default(),
-            anchored: BTreeMap::new(),
-            travelled: BTreeSet::new(),
+            template: Template::default(),
+            pending: Vec::new(),
         }
     }
 
     /// Runs the merge.
     pub(crate) fn run(mut self) -> Merged {
         self.apply_migrations();
-        self.find_anchors();
+        self.template = Template::of(&self.defaults, self.marker());
 
         let empty = Table::new();
         let defaults = self.defaults.root().unwrap_or(&empty).clone();
@@ -153,98 +151,6 @@ impl MergeEngine {
         self.migrations = migrations;
     }
 
-    // -- anchors ---------------------------------------------------------
-
-    /// Reads every standing block of the defaults for the key its sample lines
-    /// name, and sets aside the ones naming a key the defaults do not declare
-    /// but the person does. Those travel to that key.
-    fn find_anchors(&mut self) {
-        let Some(defaults) = self.defaults.root().cloned() else {
-            return;
-        };
-        let Some(user) = self.user.root().cloned() else {
-            return;
-        };
-        let mut section = None;
-        self.anchors_in(&defaults, &defaults, &user, None, &mut section);
-
-        let prefix = Prefix::from_text(self.defaults.trailing());
-        let (mut lines, touching) = prefix.split(self.marker());
-        lines.extend(touching);
-        self.anchors_of(&lines, &defaults, &user, section.as_ref());
-    }
-
-    /// Walks the defaults in the order they are written, tracking which table's
-    /// section the text between keys belongs to.
-    fn anchors_in(
-        &mut self,
-        table: &Table,
-        defaults: &Table,
-        user: &Table,
-        within: Option<&DottedPath>,
-        section: &mut Option<DottedPath>,
-    ) {
-        for (name, item) in table.iter() {
-            let Some(key) = table.key(name) else {
-                continue;
-            };
-            let child = child_path(within, name);
-            // A block above a `[table]` header closes the section before it,
-            // so it is read against the table it follows, not the one it
-            // precedes.
-            let reading = match item {
-                Item::Table(sub) if !sub.is_dotted() => section.clone(),
-                Item::ArrayOfTables(_) => section.clone(),
-                _ => within.cloned(),
-            };
-            let (floating, _) = Prefix::of(decor_of(key, item)).split(self.marker());
-            self.anchors_of(&floating, defaults, user, reading.as_ref());
-
-            if let Item::Table(sub) = item {
-                if !sub.is_dotted() {
-                    *section = Some(child.clone());
-                }
-                self.anchors_in(sub, defaults, user, Some(&child), section);
-            }
-        }
-    }
-
-    /// Splits standing text into its blocks and sets aside the ones that travel.
-    fn anchors_of(
-        &mut self,
-        lines: &[PrefixLine],
-        defaults: &Table,
-        user: &Table,
-        within: Option<&DottedPath>,
-    ) {
-        for run in blocks(lines, self.marker()) {
-            let Some(anchor) = Anchor::of(run, self.marker()) else {
-                continue;
-            };
-            let path = anchor.resolve(within);
-            if lookup(defaults, &path).is_some() || lookup(user, &path).is_none() {
-                continue;
-            }
-            let text: Vec<String> = run
-                .iter()
-                .filter(|line| !matches!(line, PrefixLine::User { .. }))
-                .map(|line| line.text().to_owned())
-                .collect();
-            self.travelled.insert(text.join("\n"));
-            // The marker line a block ends on separated it from the next block
-            // where the defaults wrote it. Arriving at its key, it has nothing
-            // left to separate from.
-            let mut arriving = text;
-            while arriving
-                .last()
-                .is_some_and(|line| self.marker().undress(line).trim().is_empty())
-            {
-                arriving.pop();
-            }
-            self.anchored.entry(path).or_default().extend(arriving);
-        }
-    }
-
     // -- the walk --------------------------------------------------------
 
     fn merge_table(
@@ -254,12 +160,18 @@ impl MergeEngine {
         out: &mut Table,
         path: Option<&DottedPath>,
     ) {
+        let optional = self.template.under(path).cloned().unwrap_or_default();
+        let mut done: BTreeSet<String> = defaults.iter().map(|(name, _)| name.to_owned()).collect();
+
         for (name, default_item) in defaults.iter() {
             if matches!(default_item, Item::None) {
                 continue;
             }
             let default_key = defaults.key(name).expect("a name iterated has a key");
             let child = child_path(path, name);
+            // Anything the defaults documented above this key was written to be
+            // read above it, so it goes out first.
+            self.merge_optional(&optional, &mut done, user, out, path, Some(&child));
             match user.get_key_value(name) {
                 None => {
                     let (key, item) = self.default_entry(default_key, default_item, &child);
@@ -271,13 +183,15 @@ impl MergeEngine {
             }
         }
 
+        self.merge_optional(&optional, &mut done, user, out, path, None);
+
         for (name, user_item) in user.iter() {
-            if defaults.contains_key(name) || matches!(user_item, Item::None) {
+            if done.contains(name) || matches!(user_item, Item::None) {
                 continue;
             }
             let user_key = user.key(name).expect("a name iterated has a key");
             let child = child_path(path, name);
-            if !self.anchored.contains_key(&child) {
+            if !self.template.knows(&child) {
                 let at = self.position(&child);
                 self.report.push(Diagnostic::new(
                     DiagnosticKind::UnknownKey,
@@ -288,6 +202,114 @@ impl MergeEngine {
             let (key, item) = self.keep_unknown(user_key, user_item, &child);
             out.insert_formatted(&key, item);
         }
+    }
+
+    /// Writes out the keys the defaults document without declaring, the ones
+    /// due at this point in the order.
+    ///
+    /// A key the person has set merges like any other, its `#:` line being the
+    /// default the defaults wrote by hand because there was no live value to
+    /// take one from. A key they have not set stays a `#:` line.
+    fn merge_optional(
+        &mut self,
+        optional: &Table,
+        done: &mut BTreeSet<String>,
+        user: &Table,
+        out: &mut Table,
+        path: Option<&DottedPath>,
+        above: Option<&DottedPath>,
+    ) {
+        for (name, item) in optional.iter() {
+            if done.contains(name) || matches!(item, Item::None) {
+                continue;
+            }
+            let child = child_path(path, name);
+            let due = match above {
+                Some(next) => self.template.written_before(&child) == Some(next),
+                // Whatever is left was written below the last key of its table,
+                // or below a key this table does not have.
+                None => true,
+            };
+            if !due {
+                continue;
+            }
+            let Some(key) = optional.key(name) else {
+                continue;
+            };
+            done.insert(name.to_owned());
+            match user.get_key_value(name) {
+                Some((user_key, user_item)) => {
+                    self.optional_set(key, item, user_key, user_item, out, &child);
+                }
+                None => {
+                    // Nothing to sit above yet. It waits for whatever the walk
+                    // reaches next, and for the end of the file if nothing.
+                    if !self.pending.is_empty() {
+                        self.pending.push(String::new());
+                    }
+                    self.pending
+                        .extend(comment_out(&child, key, item, self.marker()));
+                }
+            }
+        }
+    }
+
+    /// An optional key the person has set.
+    fn optional_set(
+        &mut self,
+        key: &Key,
+        item: &Item,
+        user_key: &Key,
+        user_item: &Item,
+        out: &mut Table,
+        path: &DottedPath,
+    ) {
+        let first = out.is_empty();
+        let mut block = DocBlock::default();
+        block.keep_user_text(&Prefix::of(decor_of(user_key, user_item)), self.marker());
+        let (_, touching) = Prefix::of(decor_of(key, item)).split(self.marker());
+        block.take_docs(&touching);
+        block.floating = std::mem::take(&mut self.pending);
+        if !block.floating.is_empty() {
+            block.floating.insert(0, String::new());
+            block.floating.push(String::new());
+        }
+
+        let mut merged = match (item, user_item) {
+            (Item::Value(_), Item::Value(user_value)) => {
+                self.record_default(&mut block, key, item, Some(user_value));
+                Item::Value(user_value.clone())
+            }
+            (_, Item::Table(user_table)) => {
+                let mut merged = Table::new();
+                merged.set_dotted(user_table.is_dotted());
+                self.merge_table(&Table::new(), user_table, &mut merged, Some(path));
+                Item::Table(merged)
+            }
+            (_, Item::ArrayOfTables(user_array)) => {
+                // The template describes one entry's shape. It documents the
+                // first, which is where a person reads what the rest may hold.
+                let mut array = user_array.clone();
+                if let Some(entry) = array.get_mut(0) {
+                    let mut merged = Table::new();
+                    self.merge_table(&Table::new(), entry, &mut merged, Some(path));
+                    *entry = merged;
+                }
+                Item::ArrayOfTables(array)
+            }
+            _ => user_item.clone(),
+        };
+
+        // A documented key is set apart from the one before it. A key with
+        // nothing written above it needs no setting apart.
+        let documented = !block.prose.is_empty() || !matches!(block.sample, Sample::None);
+        if block.leading_blanks.is_empty() && !first && documented {
+            block.leading_blanks = vec![String::new()];
+        }
+
+        let mut key = user_key.clone();
+        set_prefix(&mut key, &mut merged, block.render(self.marker()));
+        out.insert_formatted(&key, merged);
     }
 
     /// Merges one key present in both documents.
@@ -303,8 +325,8 @@ impl MergeEngine {
         let mut block = self.block(
             decor_of(default_key, default_item),
             decor_of(user_key, user_item),
-            path,
         );
+        self.flush_pending(&mut block);
         let expected = TomlType::of(default_item);
         let found = TomlType::of(user_item);
 
@@ -348,14 +370,25 @@ impl MergeEngine {
         out.insert_formatted(&key, item);
     }
 
+    /// Moves any optional keys waiting to be written above whatever comes next.
+    fn flush_pending(&mut self, block: &mut DocBlock) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let mut waiting = std::mem::take(&mut self.pending);
+        waiting.push(String::new());
+        waiting.append(&mut block.floating);
+        block.floating = waiting;
+    }
+
     /// The doc block for a key present in both documents: the defaults' standing
     /// text and prose, the person's blanks and comments.
-    fn block(&self, default_decor: &Decor, user_decor: &Decor, path: &DottedPath) -> DocBlock {
+    fn block(&self, default_decor: &Decor, user_decor: &Decor) -> DocBlock {
         let (floating, touching) = Prefix::of(default_decor).split(self.marker());
         let mut block = DocBlock::default();
         block.keep_user_text(&Prefix::of(user_decor), self.marker());
         block.take_docs(&touching);
-        block.floating = self.standing_text(&floating, path);
+        block.floating = self.standing_text(&floating);
         if block.leading_blanks.is_empty() && block.floating.is_empty() {
             // The person wrote nothing above this key, so the separation the
             // defaults put there is what keeps the file readable.
@@ -367,7 +400,7 @@ impl MergeEngine {
     /// The defaults' text that stands a blank line away from the key, with the
     /// maintainers' own notes dropped and the blocks that have travelled left
     /// out. Documentation anchored on this key arrives here.
-    fn standing_text(&self, floating: &[PrefixLine], path: &DottedPath) -> Vec<String> {
+    fn standing_text(&self, floating: &[PrefixLine]) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for run in standing_runs(floating, self.marker()) {
             match run {
@@ -378,7 +411,7 @@ impl MergeEngine {
                         .filter(|line| !matches!(line, PrefixLine::User { .. }))
                         .map(|line| line.text().to_owned())
                         .collect();
-                    if self.travelled.contains(&text.join("\n")) {
+                    if self.template.read.contains(&text.join("\n")) {
                         while out.last().is_some_and(|line| line.trim().is_empty()) {
                             out.pop();
                         }
@@ -387,16 +420,6 @@ impl MergeEngine {
                     out.extend(text);
                 }
             }
-        }
-        if let Some(arrived) = self.anchored.get(path) {
-            // A blank line on either side, so the block that has travelled
-            // reads as its own thing above the key it came to document.
-            while out.last().is_some_and(|line| line.trim().is_empty()) {
-                out.pop();
-            }
-            out.push(String::new());
-            out.extend(arrived.iter().cloned());
-            out.push(String::new());
         }
         if out.iter().all(|line| line.trim().is_empty()) {
             out.clear();
@@ -442,7 +465,7 @@ impl MergeEngine {
             ..DocBlock::default()
         };
         block.take_docs(&touching);
-        block.floating = self.standing_text(&floating, path);
+        block.floating = self.standing_text(&floating);
 
         let mut key = key.clone();
         let mut item = self.docs_only(item, path);
@@ -484,7 +507,7 @@ impl MergeEngine {
     fn keep_unknown(&self, key: &Key, item: &Item, path: &DottedPath) -> (Key, Item) {
         let mut block = DocBlock::default();
         block.keep_user_text(&Prefix::of(decor_of(key, item)), self.marker());
-        block.floating = self.standing_text(&[], path);
+        block.floating = Vec::new();
 
         let mut key = key.clone();
         let mut item = match item {
@@ -520,12 +543,23 @@ impl MergeEngine {
     /// The text after the last key belongs to no key, so it is not a doc block.
     /// The same ownership holds: the tool's lines there come from the defaults,
     /// and everything else is the person's and is kept as written.
-    fn merged_trailing(&self) -> String {
+    fn merged_trailing(&mut self) -> String {
+        let waiting = std::mem::take(&mut self.pending);
         let marker = self.marker();
         let prefix = Prefix::from_text(self.defaults.trailing());
         let (mut lines, touching) = prefix.split(marker);
         lines.extend(touching);
-        let mut docs = self.standing_text(&lines, &DottedPath::new("\u{0}"));
+        let mut docs = self.standing_text(&lines);
+        // Optional keys nothing came after belong at the end of the last table
+        // they were written in, which is here.
+        let mut waiting = waiting;
+        if !waiting.is_empty() {
+            if !docs.is_empty() {
+                waiting.push(String::new());
+            }
+            waiting.append(&mut docs);
+            docs = waiting;
+        }
         // One blank line separates the end of the file from the last key,
         // whatever the defaults happened to leave above their own trailing text.
         let first = docs
@@ -540,11 +574,23 @@ impl MergeEngine {
             .iter()
             .position(|line| !matches!(line, PrefixLine::Blank { .. }))
             .unwrap_or(user_lines.len());
-        let mine: Vec<&str> = user_lines[first..]
-            .iter()
-            .filter(|line| !marker.owns(line.text()))
-            .map(PrefixLine::text)
-            .collect();
+        // The tool's lines here are written again from the defaults. Taking
+        // them out leaves the blank lines that separated them, which have
+        // nothing left to separate.
+        let mut mine: Vec<&str> = Vec::new();
+        for line in &user_lines[first..] {
+            if marker.owns(line.text()) {
+                continue;
+            }
+            let blank = line.text().trim().is_empty();
+            if blank && mine.last().is_none_or(|last| last.trim().is_empty()) {
+                continue;
+            }
+            mine.push(line.text());
+        }
+        while mine.last().is_some_and(|line| line.trim().is_empty()) {
+            mine.pop();
+        }
 
         let content = docs.iter().any(|line| !line.trim().is_empty())
             || mine.iter().any(|line| !line.trim().is_empty());
@@ -562,7 +608,7 @@ impl MergeEngine {
 }
 
 /// The blocks in a stretch of standing text.
-fn blocks<'a>(lines: &'a [PrefixLine], marker: &Marker) -> Vec<&'a [PrefixLine]> {
+pub(crate) fn blocks<'a>(lines: &'a [PrefixLine], marker: &Marker) -> Vec<&'a [PrefixLine]> {
     standing_runs(lines, marker)
         .into_iter()
         .filter_map(|run| match run {
@@ -667,7 +713,7 @@ fn child_path(path: Option<&DottedPath>, name: &str) -> DottedPath {
 /// For a key-value pair it is the key's own leaf decor. A standalone table
 /// carries it in its own decor, and an array of tables in that of its first
 /// entry, because that is what sits under the comment in the file.
-fn decor_of<'a>(key: &'a Key, item: &'a Item) -> &'a Decor {
+pub(crate) fn decor_of<'a>(key: &'a Key, item: &'a Item) -> &'a Decor {
     match item {
         Item::Table(table) if !table.is_dotted() => table.decor(),
         Item::ArrayOfTables(array) => match array.get(0) {

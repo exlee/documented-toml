@@ -144,59 +144,87 @@ none, the blank line the defaults put above the key is used, because that
 separation is part of the shape the defaults give the file and options with a
 paragraph of prose each are unreadable run together.
 
-### 4.4 Anchors
+### 4.4 Optional keys
 
-A `#:` line is TOML, so it names a key. The first sample line of a block is its
-anchor: the key the block is about.
+A `#:` line is TOML, so a run of them is a document: the options an application
+cannot ship a value for, written out as the person would write them.
 
 ```toml
+##: How long to wait. Unset, the server decides.
+#: timeout = 30
+
 ##: Accounts are written as [[accounts]] blocks:
-##:
 #: [[accounts]]
 #: name = "Personal"
 #: host = "imap.example.com"
 ```
 
-Only the first line is read, so a block going on to show several variants of
-the same table, or a value spanning several lines, still anchors. A `[table]`
-or `[[array]]` header names a key from the root; a bare assignment names one in
-the table whose section the block sits in. A block with no sample lines is
-prose and anchors nothing.
+These are **optional keys**: keys the defaults document without declaring. Read
+back into a table, with the `##:` prose above each one kept as that key's own
+comment, they take part in the merge exactly as declared keys do. Section 5's
+rules apply to them unchanged, and two things follow.
 
-A block ends where the next anchor begins. A blank line ends one, and so does a
-sample line opening a `[table]` header: it names a key of its own, so what
-follows documents that key and not the last one. Prose written directly above
-such a header introduces it, and goes with the block the header opens. One
-stretch of documentation describing a whole nested shape is therefore several
-blocks, and each travels to the key it names:
+A person who sets one is not told the option does not exist. The defaults know
+about it; they only had no value to give it.
+
+Set, it merges like any other key, and its `#:` line is the shipped default
+recorded above it under section 4.2. For a declared key that line is generated
+from the live value; for an optional key the defaults wrote it out by hand,
+because there was no live value to take one from. Same line, same meaning, same
+place.
 
 ```toml
-##: How a source is written:
-#: [[source]]              <- anchors `source`
-#: name = "example"
-#:
-#: [source.outgoing]       <- anchors `source.outgoing`, a block of its own
-#: host = "smtp.example.com"
+# defaults                    # user                  # merged
+##: This value is counter     counter = 3             ##: This value is counter
+counter = 1                   optional_counter = 5    #: counter = 1
+                                                      counter = 3
+##: Optional counter
+#: optional_counter = 1                               ##: Optional counter
+                                                      #: optional_counter = 1
+                                                      optional_counter = 5
 ```
 
-A person with both gets the first block above their `[[source]]` and the second
-above their `[source.outgoing]`; corpus file 0018 states it. A path reaches through an array of tables,
-whose entries share a shape, so `source.outgoing` names the `outgoing` table of
-a `[[source]]` entry.
+Unset, it stays the `#:` lines it was written as, at the point in the shape the
+defaults gave it. Nothing is materialised: the block says what the option may
+hold, not what it holds by default. This is the one place the merge does not
+write a default key out as a live value, and it is why an optional key needs
+its default spelled out in the block, there being no value to take one from.
 
-The marker line a block ends on separated it from the next block where the
-defaults wrote it. Arriving at its key it has nothing left to separate from, so
-it is left off.
+An optional key keeps its place in the order (section 6): it is written where
+the defaults wrote it, above the declared key its block sat above, or at the
+end of its table when nothing followed it.
 
-An anchor does two things. It says the defaults know about that key, so a
-person who sets it is not warned that the option does not exist. And it says
-where the block belongs: once the person declares the key for real, the block
-travels from wherever the defaults wrote it to sit above what they wrote.
+#### Reading the blocks
 
-This is how an option the application cannot ship a value for gets documented
-at all. `[[accounts]]` has no sensible default, so the defaults describe it in
-a block anchored on it, and the description arrives above the person's own
-accounts once they have some.
+A block ends where the next one begins. A blank line ends one, and so does a
+sample line opening a `[table]` header: it names a key of its own. Prose
+written directly above such a header introduces it, and goes with the block the
+header opens.
+
+Each block is read against the section the headers before it opened, the way a
+file of its own would be, so a bare assignment after a header lands inside it:
+
+```toml
+#: [[accounts]]
+#: name = "Personal"
+
+##: Case-insensitive globs to omit from discovery.
+#: ignored_folders = ["Spam"]        <- accounts.ignored_folders, not a root key
+```
+
+A block that is not TOML, or that names a key another block has already named,
+is left where it was written and merges into nothing. A defaults author showing
+two ways to fill in the same table means both to be read, not merged, and a
+block of illustrations is not an option at all.
+
+A path reaches through an array of tables, whose entries share a shape, so
+`accounts.outgoing` names the `outgoing` table of an `[[accounts]]` entry. The
+template describes one entry, and documents the first, which is where a person
+reads what the rest may hold.
+
+A sample line directly above a key, with no blank line between, is that key's
+recorded default under section 4.2 and not a block of its own. A sample for a
+different option belongs a blank line away.
 
 ### 4.5 Text after the last key
 
@@ -217,7 +245,8 @@ order; the user provides the values.
 | Key in both, types differ | user's item preserved unchanged | `TypeMismatch`, error |
 | Key only in defaults | default's key and value inserted, with docs | nothing |
 | Key only in user file | user's key preserved unchanged, appended | `UnknownKey`, warning |
-| Key only in user file, anchored in defaults | user's key appended, with the anchored block above it | nothing |
+| Key documented but not declared, set by user | merged as any other key, `#:` line recorded above | nothing |
+| Key documented but not declared, unset | left as the `#:` lines it was written as | nothing |
 
 ### 5.1 Arrays
 
@@ -445,9 +474,10 @@ interrupted run cannot leave a truncated config behind.
 - No element-wise merging of arrays or arrays of tables.
 - No schema, no validation beyond TOML type agreement with the defaults.
 - No preservation of a person's edits to marker lines.
-- A block anchors on one key, the one its first sample line names. Blocks are
-  cut at `[table]` headers, so a shape documented without them, several
-  unrelated bare assignments in one run, travels to the first key named.
+- An optional key's default has to be written into its `#:` line by hand. There
+  is no value to take one from, which is what makes it optional.
+- Two blocks naming the same key are not merged. The second is left where it
+  was written.
 - A TOML comment beginning with `###` cannot appear inside a corpus file.
 - The merge is not idempotent across a change in the defaults, which is the
   point; it is idempotent when the defaults are unchanged.
@@ -459,6 +489,10 @@ above the key (section 4.3), is a choice. No example so far requires it. Corpus
 file 0004 encodes it and is the single file to change if the opposite order is
 wanted.
 
-Whether an anchored block should still carry its samples once the person has
-declared the key for real is open. It does today, so the reference sits above
-what they wrote. Corpus file 0016 encodes it.
+Whether an optional key set to exactly its documented default should still have
+that default recorded above it is open. It does not today, following section
+4.2, so the `#:` line disappears at the moment the person's value matches it.
+
+Where the documentation goes when a person has several `[[accounts]]` entries
+is open. It goes on the first, so an 80-line block is written once, not per
+entry. Corpus file 0017 has one entry and does not decide it.

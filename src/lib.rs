@@ -10,7 +10,6 @@
 //! # Ok::<(), toml_merge::Error>(())
 //! ```
 
-pub mod anchor;
 pub mod decor;
 pub mod error;
 pub mod merge;
@@ -18,8 +17,8 @@ pub mod options;
 pub mod path;
 pub mod report;
 pub mod source;
+pub mod template;
 
-pub use anchor::Anchor;
 pub use decor::{
     DEFAULT_PROSE_MARKER, DEFAULT_SAMPLE_MARKER, DefaultEcho, DocBlock, Marker, Prefix, PrefixLine,
     Sample,
@@ -32,6 +31,7 @@ pub use report::{
     Diagnostic, DiagnosticKind, Position, Report, Severity, Span, SpanIndex, TomlType,
 };
 pub use source::SourceDocument;
+pub use template::Template;
 
 /// Merges a user document against the defaults with the default marker and no
 /// rename rules. See [`MergeOptions`] for the configurable form.
