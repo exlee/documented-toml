@@ -17,13 +17,17 @@ pub enum Error {
         /// The underlying parse failure.
         source: TomlError,
     },
-    /// The defaults parsed and hold text, but declare no keys.
+    /// The defaults parsed and hold text, but declare no keys and document
+    /// none either.
     ///
-    /// A defaults document made only of comments has nothing to merge into and
-    /// nothing to document. That is an application bug, so it fails here
-    /// instead of becoming a state the merge has to carry. A zero-byte defaults
-    /// document is a separate case and is allowed, see
-    /// [`SourceDocument::Empty`](crate::SourceDocument::Empty).
+    /// A defaults document made only of the maintainers' own notes has nothing
+    /// to merge into and nothing to say. That is an application bug, so it
+    /// fails here instead of becoming a state the merge has to carry. A
+    /// document of marker lines alone is not this: an option anchored on a key
+    /// the application ships no value for is documented without declaring
+    /// anything, and a defaults file of nothing but such blocks is a whole
+    /// configuration. A zero-byte defaults document is a separate case and is
+    /// allowed, see [`SourceDocument::Empty`](crate::SourceDocument::Empty).
     DefaultsDeclareNoKeys,
     /// A rename rule was given a path that is not a TOML key path.
     MigrationPath {

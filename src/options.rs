@@ -54,7 +54,9 @@ impl MergeOptions {
     pub fn merge(&self, default_src: &str, user_src: &str) -> Result<Merged, Error> {
         let defaults =
             SourceDocument::parse(default_src).map_err(|source| Error::DefaultParse { source })?;
-        if defaults.has_text_but_no_keys() {
+        if defaults.has_text_but_no_keys()
+            && !default_src.lines().any(|line| self.marker.owns(line))
+        {
             return Err(Error::DefaultsDeclareNoKeys);
         }
         let (user, spans) = SourceDocument::parse_with_spans(user_src)

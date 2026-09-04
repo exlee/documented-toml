@@ -163,6 +163,31 @@ or `[[array]]` header names a key from the root; a bare assignment names one in
 the table whose section the block sits in. A block with no sample lines is
 prose and anchors nothing.
 
+A block ends where the next anchor begins. A blank line ends one, and so does a
+sample line opening a `[table]` header: it names a key of its own, so what
+follows documents that key and not the last one. Prose written directly above
+such a header introduces it, and goes with the block the header opens. One
+stretch of documentation describing a whole nested shape is therefore several
+blocks, and each travels to the key it names:
+
+```toml
+##: How a source is written:
+#: [[source]]              <- anchors `source`
+#: name = "example"
+#:
+#: [source.outgoing]       <- anchors `source.outgoing`, a block of its own
+#: host = "smtp.example.com"
+```
+
+A person with both gets the first block above their `[[source]]` and the second
+above their `[source.outgoing]`; corpus file 0018 states it. A path reaches through an array of tables,
+whose entries share a shape, so `source.outgoing` names the `outgoing` table of
+a `[[source]]` entry.
+
+The marker line a block ends on separated it from the next block where the
+defaults wrote it. Arriving at its key it has nothing left to separate from, so
+it is left off.
+
 An anchor does two things. It says the defaults know about that key, so a
 person who sets it is not warned that the option does not exist. And it says
 where the block belongs: once the person declares the key for real, the block
@@ -328,8 +353,10 @@ pub enum Error {
 Which document failed to parse is part of the error, because a broken default
 document is the application's fault and a broken user document is the person's.
 `DefaultsDeclareNoKeys` is the defaults parsing into text that declares nothing
-to merge, which is an application bug; a zero-byte defaults document is a
-separate case and is allowed. `migrate` takes its paths as written and reads
+and documents nothing, which is an application bug; a defaults document of
+marker lines alone is not this, because an anchored block documents an option
+without declaring it, and a zero-byte defaults document is a separate case and
+is allowed. `migrate` takes its paths as written and reads
 them as TOML key paths at merge time, so an unreadable one fails the merge,
 not the builder call.
 
@@ -418,8 +445,9 @@ interrupted run cannot leave a truncated config behind.
 - No element-wise merging of arrays or arrays of tables.
 - No schema, no validation beyond TOML type agreement with the defaults.
 - No preservation of a person's edits to marker lines.
-- A block anchors on one key, the one its first sample line names. A block
-  describing several unrelated options travels to the first of them.
+- A block anchors on one key, the one its first sample line names. Blocks are
+  cut at `[table]` headers, so a shape documented without them, several
+  unrelated bare assignments in one run, travels to the first key named.
 - A TOML comment beginning with `###` cannot appear inside a corpus file.
 - The merge is not idempotent across a change in the defaults, which is the
   point; it is idempotent when the defaults are unchanged.

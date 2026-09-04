@@ -112,3 +112,64 @@ fn every_default_key_is_materialised_with_a_live_value() {
     assert_eq!(document["a"]["b"].as_integer(), Some(1));
     assert_eq!(document["c"][0]["d"].as_integer(), Some(2));
 }
+
+#[test]
+fn each_block_of_a_nested_shape_reaches_its_own_key() {
+    let defaults = "##: How a source is written:\n#: [[source]]\n#: name = \"example\"\n#:\n#: [source.outgoing]\n#: host = \"smtp.example.com\"\n";
+    let user = "[[source]]\nname = \"mine\"\n\n[source.outgoing]\nhost = \"smtp.mine.com\"\n";
+    let merged = MergeOptions::new().merge(defaults, user).unwrap();
+    let text = merged.to_toml_string();
+    assert!(
+        text.contains("#: name = \"example\"\n\n[[source]]"),
+        "the source block did not reach [[source]]:\n{text}"
+    );
+    assert!(
+        text.contains("#: host = \"smtp.example.com\"\n\n[source.outgoing]"),
+        "the outgoing block did not reach [source.outgoing]:\n{text}"
+    );
+    assert!(merged.report.diagnostics().is_empty());
+}
+
+#[test]
+fn a_block_naming_a_key_nobody_declares_stays_where_it_was_written() {
+    let defaults = "##: How a source is written:\n#: [[source]]\n#: name = \"example\"\n#:\n#: [source.incoming]\n#: host = \"imap.example.com\"\n";
+    let user = "[[source]]\nname = \"mine\"\n";
+    let merged = MergeOptions::new().merge(defaults, user).unwrap();
+    let text = merged.to_toml_string();
+    assert!(
+        text.trim_end().ends_with("#: host = \"imap.example.com\""),
+        "the incoming block should have stayed at the end:\n{text}"
+    );
+}
+
+#[test]
+fn a_path_reaches_through_an_array_of_tables_to_find_a_key() {
+    // `source.outgoing` names the `outgoing` table of a `[[source]]` entry.
+    let defaults = "##: Where answers go.\n#: [source.outgoing]\n#: host = \"smtp.example.com\"\n";
+    let user = "[[source]]\nname = \"mine\"\n\n[source.outgoing]\nhost = \"smtp.mine.com\"\n";
+    let merged = MergeOptions::new().merge(defaults, user).unwrap();
+    assert!(
+        merged
+            .to_toml_string()
+            .contains("##: Where answers go.\n#: [source.outgoing]\n#: host = \"smtp.example.com\"\n\n[source.outgoing]"),
+        "{}",
+        merged.to_toml_string()
+    );
+}
+
+#[test]
+fn defaults_of_documentation_alone_are_a_configuration() {
+    // The application ships no value for `source`, and cannot: the block
+    // anchored on it is the whole of what the defaults have to say.
+    let merged = merge(
+        "##: How a source is written:\n#: [[source]]\n#: name = \"example\"\n",
+        "[[source]]\nname = \"mine\"\n",
+    )
+    .unwrap();
+    assert!(merged.report.diagnostics().is_empty());
+    assert!(
+        merged
+            .to_toml_string()
+            .contains("##: How a source is written:")
+    );
+}

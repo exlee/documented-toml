@@ -217,7 +217,7 @@ impl MergeEngine {
         user: &Table,
         within: Option<&DottedPath>,
     ) {
-        for run in blocks(lines) {
+        for run in blocks(lines, self.marker()) {
             let Some(anchor) = Anchor::of(run, self.marker()) else {
                 continue;
             };
@@ -231,7 +231,17 @@ impl MergeEngine {
                 .map(|line| line.text().to_owned())
                 .collect();
             self.travelled.insert(text.join("\n"));
-            self.anchored.insert(path, text);
+            // The marker line a block ends on separated it from the next block
+            // where the defaults wrote it. Arriving at its key, it has nothing
+            // left to separate from.
+            let mut arriving = text;
+            while arriving
+                .last()
+                .is_some_and(|line| self.marker().undress(line).trim().is_empty())
+            {
+                arriving.pop();
+            }
+            self.anchored.entry(path).or_default().extend(arriving);
         }
     }
 
@@ -252,7 +262,7 @@ impl MergeEngine {
             let child = child_path(path, name);
             match user.get_key_value(name) {
                 None => {
-                    let (key, item) = self.default_entry(default_key, default_item);
+                    let (key, item) = self.default_entry(default_key, default_item, &child);
                     out.insert_formatted(&key, item);
                 }
                 Some((user_key, user_item)) => {
@@ -359,7 +369,7 @@ impl MergeEngine {
     /// out. Documentation anchored on this key arrives here.
     fn standing_text(&self, floating: &[PrefixLine], path: &DottedPath) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        for run in blocks_and_blanks(floating) {
+        for run in standing_runs(floating, self.marker()) {
             match run {
                 Standing::Blanks(lines) => out.extend(lines),
                 Standing::Block(lines) => {
@@ -423,7 +433,7 @@ impl MergeEngine {
 
     /// A key the person does not have yet, taken from the defaults with the
     /// maintainers' own notes stripped out.
-    fn default_entry(&self, key: &Key, item: &Item) -> (Key, Item) {
+    fn default_entry(&self, key: &Key, item: &Item, path: &DottedPath) -> (Key, Item) {
         let prefix = Prefix::of(decor_of(key, item));
         let (floating, touching) = prefix.split(self.marker());
         let mut block = DocBlock {
@@ -432,22 +442,22 @@ impl MergeEngine {
             ..DocBlock::default()
         };
         block.take_docs(&touching);
-        block.floating = self.standing_text(&floating, &DottedPath::new(key.get()));
+        block.floating = self.standing_text(&floating, path);
 
         let mut key = key.clone();
-        let mut item = self.docs_only(item);
+        let mut item = self.docs_only(item, path);
         set_prefix(&mut key, &mut item, block.render(self.marker()));
         (key, item)
     }
 
     /// The same stripping, applied through a table or an array of tables.
-    fn docs_only(&self, item: &Item) -> Item {
+    fn docs_only(&self, item: &Item, path: &DottedPath) -> Item {
         match item {
-            Item::Table(table) => Item::Table(self.docs_only_table(table)),
+            Item::Table(table) => Item::Table(self.docs_only_table(table, path)),
             Item::ArrayOfTables(array) => {
                 let mut out = ArrayOfTables::new();
                 for entry in array.iter() {
-                    out.push(self.docs_only_table(entry));
+                    out.push(self.docs_only_table(entry, path));
                 }
                 Item::ArrayOfTables(out)
             }
@@ -455,13 +465,13 @@ impl MergeEngine {
         }
     }
 
-    fn docs_only_table(&self, table: &Table) -> Table {
+    fn docs_only_table(&self, table: &Table, path: &DottedPath) -> Table {
         let mut out = Table::new();
         out.set_dotted(table.is_dotted());
         out.set_implicit(table.is_implicit());
         for (name, item) in table.iter() {
             let key = table.key(name).expect("a name iterated has a key");
-            let (key, item) = self.default_entry(key, item);
+            let (key, item) = self.default_entry(key, item, &path.child(name));
             out.insert_formatted(&key, item);
         }
         out
@@ -478,11 +488,11 @@ impl MergeEngine {
 
         let mut key = key.clone();
         let mut item = match item {
-            Item::Table(table) => Item::Table(self.keep_unknown_table(table)),
+            Item::Table(table) => Item::Table(self.keep_unknown_table(table, path)),
             Item::ArrayOfTables(array) => {
                 let mut out = ArrayOfTables::new();
                 for entry in array.iter() {
-                    out.push(self.keep_unknown_table(entry));
+                    out.push(self.keep_unknown_table(entry, path));
                 }
                 Item::ArrayOfTables(out)
             }
@@ -492,14 +502,14 @@ impl MergeEngine {
         (key, item)
     }
 
-    fn keep_unknown_table(&self, table: &Table) -> Table {
+    fn keep_unknown_table(&self, table: &Table, path: &DottedPath) -> Table {
         let mut out = Table::new();
         out.set_dotted(table.is_dotted());
         out.set_implicit(table.is_implicit());
         *out.decor_mut() = table.decor().clone();
         for (name, item) in table.iter() {
             let key = table.key(name).expect("a name iterated has a key");
-            let (key, item) = self.keep_unknown(key, item, &DottedPath::new(name));
+            let (key, item) = self.keep_unknown(key, item, &path.child(name));
             out.insert_formatted(&key, item);
         }
         out
@@ -551,10 +561,9 @@ impl MergeEngine {
     }
 }
 
-/// The runs of the tool's lines in a stretch of standing text, blank lines
-/// separating one from the next.
-fn blocks(lines: &[PrefixLine]) -> Vec<&[PrefixLine]> {
-    blocks_and_blanks(lines)
+/// The blocks in a stretch of standing text.
+fn blocks<'a>(lines: &'a [PrefixLine], marker: &Marker) -> Vec<&'a [PrefixLine]> {
+    standing_runs(lines, marker)
         .into_iter()
         .filter_map(|run| match run {
             Standing::Block(lines) => Some(lines),
@@ -568,13 +577,19 @@ enum Standing<'a> {
     Block(&'a [PrefixLine]),
 }
 
-fn blocks_and_blanks(lines: &[PrefixLine]) -> Vec<Standing<'_>> {
+/// Standing text split into its blocks, keeping the blank lines between them.
+///
+/// A blank line ends a block. So does a sample line opening a `[table]`
+/// header: it names a key of its own, so what follows documents that key and
+/// not the last one. Prose written directly above such a header introduces it,
+/// and goes with the block the header opens.
+fn standing_runs<'a>(lines: &'a [PrefixLine], marker: &Marker) -> Vec<Standing<'a>> {
+    let blank = |line: &PrefixLine| matches!(line, PrefixLine::Blank { .. });
     let mut out = Vec::new();
     let mut at = 0;
     while at < lines.len() {
-        let blank = |line: &PrefixLine| matches!(line, PrefixLine::Blank { .. });
+        let start = at;
         if blank(&lines[at]) {
-            let start = at;
             while at < lines.len() && blank(&lines[at]) {
                 at += 1;
             }
@@ -585,14 +600,49 @@ fn blocks_and_blanks(lines: &[PrefixLine]) -> Vec<Standing<'_>> {
                     .collect(),
             ));
         } else {
-            let start = at;
             while at < lines.len() && !blank(&lines[at]) {
                 at += 1;
             }
-            out.push(Standing::Block(&lines[start..at]));
+            out.extend(
+                split_at_headers(&lines[start..at], marker)
+                    .into_iter()
+                    .map(Standing::Block),
+            );
         }
     }
     out
+}
+
+/// One run of the tool's lines, cut where a new `[table]` header takes over.
+fn split_at_headers<'a>(run: &'a [PrefixLine], marker: &Marker) -> Vec<&'a [PrefixLine]> {
+    let mut starts = vec![0usize];
+    for (at, line) in run.iter().enumerate().skip(1) {
+        if !opens_table(line, marker) {
+            continue;
+        }
+        let mut start = at;
+        while start > 0 && matches!(run[start - 1], PrefixLine::Prose { .. }) {
+            start -= 1;
+        }
+        if start > *starts.last().expect("starts is never empty") {
+            starts.push(start);
+        }
+    }
+    starts
+        .iter()
+        .enumerate()
+        .map(|(n, &start)| {
+            let end = starts.get(n + 1).copied().unwrap_or(run.len());
+            &run[start..end]
+        })
+        .collect()
+}
+
+fn opens_table(line: &PrefixLine, marker: &Marker) -> bool {
+    match line {
+        PrefixLine::Sample { text } => marker.undress(text).trim_start().starts_with('['),
+        _ => false,
+    }
 }
 
 /// The blank lines a key has above it in the defaults, which is what separates
@@ -719,7 +769,11 @@ fn lookup<'t>(root: &'t Table, path: &DottedPath) -> Option<&'t Item> {
         if segments.peek().is_none() {
             return Some(item);
         }
-        table = item.as_table()?;
+        table = match item {
+            Item::Table(sub) => sub,
+            Item::ArrayOfTables(array) => array.get(0)?,
+            _ => return None,
+        };
     }
     None
 }
