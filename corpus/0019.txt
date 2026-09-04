@@ -1,0 +1,72 @@
+### A second `[[entry]]` block extends the array, as it would in a file of its
+### own: it is another example of what one entry may hold. The person's first
+### entry is the one documented, and every example past it stays written out,
+### like any optional key nobody has set.
+--- DEF ---
+##: The only declared option.
+declared = 1
+
+##: How a source is written:
+#: [[source]]
+#: name = "example"
+
+##: A second source, for when one is not enough.
+#: [[source]]
+#: name = "other"
+--- USR ---
+declared = 1
+
+[[source]]
+name = "mine"
+--- RES ---
+##: The only declared option.
+declared = 1
+
+##: How a source is written:
+[[source]]
+#: name = "example"
+name = "mine"
+
+##: A second source, for when one is not enough.
+#: [[source]]
+#: name = "other"
+### With no source of their own, both examples stay as written.
+--- USR ---
+declared = 1
+--- RES ---
+##: The only declared option.
+declared = 1
+
+##: How a source is written:
+#: [[source]]
+#: name = "example"
+
+##: A second source, for when one is not enough.
+#: [[source]]
+#: name = "other"
+### Prose introduces what follows it. Prose with nothing following it
+### introduces nothing, and reading the block would drop it, so the block is
+### left where it was written instead. A note belongs above the key it is
+### about.
+--- DEF ---
+##: The only declared option.
+declared = 1
+
+#: [source]
+#: host = "example.com"
+##: A note written below the last key of the block.
+--- USR ---
+declared = 1
+
+[source]
+host = "mine.com"
+--- RES ---
+##: The only declared option.
+declared = 1
+
+[source]
+host = "mine.com"
+
+#: [source]
+#: host = "example.com"
+##: A note written below the last key of the block.

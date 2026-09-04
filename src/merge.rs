@@ -295,6 +295,21 @@ impl MergeEngine {
                     self.merge_table(&Table::new(), entry, &mut merged, Some(path));
                     *entry = merged;
                 }
+                // Entries the template has beyond the first are further
+                // examples, not the shape of what is already there. They stay
+                // written out, like any optional key nobody has set.
+                if let Item::ArrayOfTables(template_array) = item {
+                    for extra in template_array.iter().skip(1) {
+                        let mut single = ArrayOfTables::new();
+                        single.push(extra.clone());
+                        if !self.pending.is_empty() {
+                            self.pending.push(String::new());
+                        }
+                        let lines =
+                            comment_out(path, key, &Item::ArrayOfTables(single), self.marker());
+                        self.pending.extend(lines);
+                    }
+                }
                 Item::ArrayOfTables(array)
             }
             _ => user_item.clone(),

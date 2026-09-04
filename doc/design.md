@@ -212,10 +212,19 @@ file of its own would be, so a bare assignment after a header lands inside it:
 #: ignored_folders = ["Spam"]        <- accounts.ignored_folders, not a root key
 ```
 
-A block that is not TOML, or that names a key another block has already named,
-is left where it was written and merges into nothing. A defaults author showing
-two ways to fill in the same table means both to be read, not merged, and a
-block of illustrations is not an option at all.
+A second `[[entry]]` block extends the array, as it would in a file of its own:
+it is another example of what one entry may hold. The person's first entry is
+the one documented, and every example past it stays written out, like any
+optional key nobody has set.
+
+A block is left where it was written, merging into nothing, when it is not
+TOML, when it names a key another block has already named, or when it ends in
+prose that introduces no key. The second covers a defaults author showing two
+ways to fill in one `[table]`, which means both to be read; TOML has no way to
+say "either of these", so neither can the template. The third follows from
+prose introducing what comes after it: prose with nothing after it introduces
+nothing, and reading the block would drop it. A note belongs above the key it
+is about.
 
 A path reaches through an array of tables, whose entries share a shape, so
 `accounts.outgoing` names the `outgoing` table of an `[[accounts]]` entry. The
@@ -476,8 +485,9 @@ interrupted run cannot leave a truncated config behind.
 - No preservation of a person's edits to marker lines.
 - An optional key's default has to be written into its `#:` line by hand. There
   is no value to take one from, which is what makes it optional.
-- Two blocks naming the same key are not merged. The second is left where it
-  was written.
+- Two blocks naming the same `[table]` are not merged. The second is left where
+  it was written, so an alternative way of filling one table reads as a note
+  beside the option and not as part of it.
 - A TOML comment beginning with `###` cannot appear inside a corpus file.
 - The merge is not idempotent across a change in the defaults, which is the
   point; it is idempotent when the defaults are unchanged.

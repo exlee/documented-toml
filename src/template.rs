@@ -117,9 +117,10 @@ impl Template {
 
     /// Reads one block, answering whether it could be read at all.
     ///
-    /// A block that is not TOML, or that names a key another block has already
-    /// named, is left where it was written: a defaults author showing two ways
-    /// to fill in the same table means both to be read, not merged.
+    /// A block is left where it was written when it is not TOML, when it names
+    /// a key another block has already named, or when it ends in prose that
+    /// introduces no key. The first two are a defaults author showing two ways
+    /// to fill in one table, which means both to be read, not merged.
     fn read_block(
         &mut self,
         block: &[PrefixLine],
@@ -136,6 +137,16 @@ impl Template {
         let Ok(document) = source_of(block, scaffold, marker).parse::<DocumentMut>() else {
             return false;
         };
+        // Prose introduces what follows it. Prose with nothing following it
+        // introduces nothing, and reading the block would drop it, so the block
+        // is left where it was written instead.
+        if document
+            .trailing()
+            .as_str()
+            .is_some_and(|text| !text.trim().is_empty())
+        {
+            return false;
+        }
         let mut merged = self.root.clone();
         if !graft(&mut merged, document.as_table()) {
             return false;
@@ -247,7 +258,13 @@ fn collect_paths(table: &Table, within: Option<&DottedPath>, out: &mut Vec<Dotte
 fn space_tables(item: &mut Item) {
     let tables: Vec<&mut Table> = match item {
         Item::Table(table) => vec![table],
-        Item::ArrayOfTables(array) => array.iter_mut().collect(),
+        Item::ArrayOfTables(array) => {
+            // Every entry after the first opens a header of its own.
+            for entry in array.iter_mut().skip(1) {
+                space(entry.decor_mut());
+            }
+            array.iter_mut().collect()
+        }
         _ => return,
     };
     for table in tables {
@@ -328,6 +345,13 @@ fn graft(into: &mut Table, from: &Table) -> bool {
                 }
                 None => return false,
             },
+            // A second `[[entry]]` block extends the array, as it would in a
+            // file: it is another example of what one entry may hold.
+            (Some(Item::ArrayOfTables(there)), Item::ArrayOfTables(here)) => {
+                for entry in here.iter() {
+                    there.push(entry.clone());
+                }
+            }
             _ => return false,
         }
     }
