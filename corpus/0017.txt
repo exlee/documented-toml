@@ -1,0 +1,59 @@
+--- DEF ---
+##: Accounts are defined as [[accounts]] blocks, e.g.:
+##:
+#: [[accounts]]
+##: What the account is called, everywhere: the folder tree's heading, the
+##: rows in the store, `account:` in a query.
+#: name = "Personal"
+#: email_address = "jane@example.com"
+#: aliases = ["jane+lists@example.com"]
+
+##: Case-insensitive IMAP path globs to omit from discovery and sync.
+##: `*` matches any sequence (including `/`); `?` matches one character.
+#: ignored_folders = ["Spam", "Trash", "Archive/Old*"]
+
+#: [accounts.ui]
+##: Folders synchronized as usual — their mail is searchable and shows up in
+##: account-wide views — but kept off the folder list. Same glob syntax.
+#: hidden_folders = ["[Gmail]/All Mail", "Archive/*"]
+##: Folders a blank line is drawn above, spelled the way the tree spells
+##: them. The line travels with the folder when the folder is reordered.
+#: separators = ["Archive"]
+--- USR ---
+[[accounts]]
+name = "Fastmail"
+email_address = "some@email.org"
+ignored_folders = ["Archive"]
+
+[accounts.ui]
+hidden_folders = ["Lists","Trash"]
+separators = ["Important", "Drafts"]
+--- RES ---
+##: Accounts are defined as [[accounts]] blocks, e.g.:
+##:
+[[accounts]]
+##: What the account is called, everywhere: the folder tree's heading, the
+##: rows in the store, `account:` in a query.
+#: name = "Personal"
+name = "Fastmail"
+
+#: email_address = "jane@example.com"
+email_address = "some@email.org"
+
+#: aliases = ["jane+lists@example.com"]
+
+##: Case-insensitive IMAP path globs to omit from discovery and sync.
+##: `*` matches any sequence (including `/`); `?` matches one character.
+#: ignored_folders = ["Spam", "Trash", "Archive/Old*"]
+ignored_folders = ["Archive"]
+
+[accounts.ui]
+##: Folders synchronized as usual — their mail is searchable and shows up in
+##: account-wide views — but kept off the folder list. Same glob syntax.
+#: hidden_folders = ["[Gmail]/All Mail", "Archive/*"]
+hidden_folders = ["Lists","Trash"]
+
+##: Folders a blank line is drawn above, spelled the way the tree spells
+##: them. The line travels with the folder when the folder is reordered.
+#: separators = ["Archive"]
+separators = ["Important", "Drafts"]
