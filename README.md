@@ -138,4 +138,4 @@ contains byte-for-byte examples and idempotence cases.
 
 ## License
 
-X11. See [`LICENSE`](LICENSE).
+X11. See [LICENSE](https://github.com/exlee/documented-toml/blob/master/LICENSE).
