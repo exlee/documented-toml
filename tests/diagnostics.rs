@@ -40,6 +40,33 @@ fn a_value_of_the_wrong_type_is_an_error() {
 }
 
 #[test]
+fn integer_overrides_are_valid_for_float_defaults() {
+    let defaults = "[ui.font]\nsize = 14.0\n";
+    for value in ["14", "0", "-2", "1_000", "0x10", "9223372036854775807"] {
+        let user = format!("[ui.font]\nsize = {value} # keep this\n");
+        let merged = merge(defaults, &user).unwrap();
+        assert!(merged.report.diagnostics().is_empty(), "{value}");
+        assert!(merged.document()["ui"]["font"]["size"].is_integer());
+        let output = merged.to_toml_string();
+        assert!(output.contains(&format!("size = {value} # keep this\n")));
+        let again = merge(defaults, &output).unwrap();
+        assert!(again.report.diagnostics().is_empty());
+        assert_eq!(again.to_toml_string(), output);
+    }
+}
+
+#[test]
+fn float_overrides_are_invalid_for_integer_defaults() {
+    assert_eq!(
+        kinds("size = 14\n", "size = 14.0\n"),
+        [DiagnosticKind::TypeMismatch {
+            expected: TomlType::Integer,
+            found: TomlType::Float,
+        }]
+    );
+}
+
+#[test]
 fn a_table_where_a_value_is_declared_is_a_type_mismatch() {
     assert_eq!(
         kinds("timeout = 30\n", "[timeout]\nseconds = 1\n"),

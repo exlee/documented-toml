@@ -125,8 +125,8 @@ the user file.
 ## Limits
 
 - Arrays and arrays of tables are replaced whole.
-- Validation stops at TOML type agreement; there is no schema language. TOML
-  already had quite enough punctuation.
+- Validation checks TOML types, accepting integer values for float defaults.
+  Float values for integer defaults remain errors. There is no schema language.
 - User edits to `##:` and `#:` lines are replaced by the next merge.
 - Optional defaults must appear in their `#:` line. Clairvoyance is outside the
   public API.

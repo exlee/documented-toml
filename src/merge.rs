@@ -395,7 +395,12 @@ impl MergeEngine {
         let expected = TomlType::of(default_item);
         let found = TomlType::of(user_item);
 
-        let mut item = if expected != found {
+        let compatible = expected == found
+            || matches!(
+                (expected, found),
+                (Some(TomlType::Float), Some(TomlType::Integer))
+            );
+        let mut item = if !compatible {
             if let (Some(expected), Some(found)) = (expected, found) {
                 let at = self.position(path);
                 self.report.push(Diagnostic::new(

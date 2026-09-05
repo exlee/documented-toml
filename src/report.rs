@@ -70,8 +70,8 @@ impl Diagnostic {
 pub enum DiagnosticKind {
     /// The defaults do not declare this key. The value is kept, never deleted.
     UnknownKey,
-    /// The user's value has a different TOML type from the default's. The value
-    /// is kept exactly as written.
+    /// The user's value has an incompatible TOML type. Integer values are
+    /// accepted for float defaults. The value is kept exactly as written.
     TypeMismatch {
         /// The type the defaults declare.
         expected: TomlType,

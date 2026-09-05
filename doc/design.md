@@ -262,8 +262,9 @@ order; the user provides the values.
 | Situation | Result | Report |
 |---|---|---|
 | Key in both, same type, leaf | user's value and formatting, plus doc block | nothing |
+| Float default, integer user value | user's value and formatting, plus doc block | nothing |
 | Key in both, both tables | recurse | nothing |
-| Key in both, types differ | user's item preserved unchanged | `TypeMismatch`, error |
+| Key in both, incompatible types | user's item preserved unchanged | `TypeMismatch`, error |
 | Key only in defaults | default's key and value inserted, with docs | nothing |
 | Key only in user file | user's key preserved unchanged, appended | `UnknownKey`, warning |
 | Key documented but not declared, set by user | merged as any other key, `#:` line recorded above | nothing |
@@ -334,8 +335,9 @@ Each diagnostic carries a dotted path, a 1-based line and column into the user
 source, a severity, and a kind:
 
 - `UnknownKey` (warning): the defaults do not declare this key.
-- `TypeMismatch { expected, found }` (error): the user's value has a different
-  TOML type from the default's.
+- `TypeMismatch { expected, found }` (error): the user's value has an incompatible
+  TOML type. Integers are accepted for float defaults; floats remain invalid for
+  integer defaults.
 - `Migrated { from }` (warning): a rename rule moved this value.
 
 Positions come from the user document's spans, which is why they are collected
