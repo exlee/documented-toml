@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-08
+
+### Fixed
+
+- Separate sections and their documentation with a blank line, including nested
+  sections and entries in arrays of tables.
+- Preserve default blank lines when the user supplies none above a key, and
+  retain user comment paragraph breaks and indentation.
 ## [0.1.1] - 2026-09-05
 
 ### Fixed
