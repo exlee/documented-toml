@@ -145,16 +145,20 @@ The text above a key is rebuilt in this order:
 3. the prose from the current defaults;
 4. the sample: the shipped default when the value was overridden, otherwise
    whatever samples the defaults wrote;
-5. the user's own `#` lines, in their original order;
+5. the user's own `#` lines, with their indentation and paragraph breaks;
 6. the key.
 
 The user's notes sit closest to the key they annotate; the refreshable block
 sits above them.
 
 The blank lines in step 2 are the user's when they wrote any. When they wrote
-none, the blank line the defaults put above the key is used, because that
-separation is part of the shape the defaults give the file and options with a
-paragraph of prose each are unreadable run together.
+none, the blank lines from the defaults are used, including whitespace-only
+lines and separation above keys without documentation.
+
+Each section after the first emitted content has at least one blank line
+before its documentation or header. Existing separation is preserved. This
+also applies to nested sections and each entry in an array of tables; implicit
+parents and dotted keys do not introduce headers or extra spacing.
 
 ### 4.4 Optional keys
 

@@ -142,6 +142,7 @@ impl MergeEngine {
         let mut root = Table::new();
         self.merge_table(&defaults, &user, &mut root, None);
         renumber_tables(&mut root, &mut 0);
+        space_sections(&mut root, &mut false, false);
 
         let mut document = DocumentMut::new();
         *document.as_table_mut() = root;
@@ -484,7 +485,7 @@ impl MergeEngine {
         if block.leading_blanks.is_empty() && block.floating.is_empty() {
             // The person wrote nothing above this key, so the separation the
             // defaults put there is what keeps the file readable.
-            block.leading_blanks = leading_blanks(&floating, &touching);
+            block.leading_blanks = leading_blanks(&floating);
         }
         block
     }
@@ -574,7 +575,7 @@ impl MergeEngine {
         let prefix = Prefix::of(decor_of(key, item));
         let (floating, touching) = prefix.split(self.marker());
         let mut block = DocBlock {
-            leading_blanks: leading_blanks(&floating, &touching),
+            leading_blanks: leading_blanks(&floating),
             indent: prefix.indent().to_owned(),
             ..DocBlock::default()
         };
@@ -824,11 +825,12 @@ fn opens_table(line: &PrefixLine, marker: &Marker) -> bool {
 /// The blank lines a key has above it in the defaults, which is what separates
 /// one documented option from the last when the person wrote no blanks of their
 /// own.
-fn leading_blanks(floating: &[PrefixLine], touching: &[PrefixLine]) -> Vec<String> {
-    if !floating.is_empty() && touching.iter().any(|line| !line.text().trim().is_empty()) {
-        return vec![String::new()];
-    }
-    Vec::new()
+fn leading_blanks(floating: &[PrefixLine]) -> Vec<String> {
+    floating
+        .iter()
+        .take_while(|line| matches!(line, PrefixLine::Blank { .. }))
+        .map(|line| line.text().to_owned())
+        .collect()
 }
 
 fn child_path(path: Option<&DottedPath>, name: &str) -> DottedPath {
@@ -905,6 +907,38 @@ fn strip(value: &mut Value) {
         _ => {}
     }
     value.decor_mut().clear();
+}
+
+/// Separates visible section headers, including their documentation, from
+/// preceding values or sections. Implicit parents emit no header.
+fn space_sections(table: &mut Table, emitted: &mut bool, header: bool) {
+    let has_values = !table.get_values().is_empty();
+    if header {
+        if *emitted {
+            let prefix = Prefix::of(table.decor());
+            let first_line = prefix.raw.split_once('\n').map(|(line, _)| line);
+            if !first_line.is_some_and(|line| line.trim().is_empty()) {
+                table.decor_mut().set_prefix(format!("\n{}", prefix.raw));
+            }
+        }
+        *emitted = true;
+    }
+    *emitted |= has_values;
+    for (_, item) in table.iter_mut() {
+        match item {
+            Item::Table(sub) => {
+                let visible =
+                    !sub.is_dotted() && (!sub.is_implicit() || !sub.get_values().is_empty());
+                space_sections(sub, emitted, visible);
+            }
+            Item::ArrayOfTables(array) => {
+                for entry in array.iter_mut() {
+                    space_sections(entry, emitted, true);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Renumbers standalone tables in emission order.

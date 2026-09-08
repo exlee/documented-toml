@@ -27,7 +27,12 @@ timeout = 120
 - Ordinary `#` comments belong to the user.
 
 Application-owned lines are refreshed from the defaults on every merge. User
-comments remain. Both markers are configurable.
+comments retain their indentation and paragraph breaks. Both markers are
+configurable.
+
+Sections are separated by a blank line before their documentation or header.
+Existing blank lines are preserved; when the user supplies none above a key,
+the spacing from the defaults is used.
 
 ## Example
 

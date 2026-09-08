@@ -248,16 +248,28 @@ impl DocBlock {
     pub(crate) fn keep_user_text(&mut self, prefix: &Prefix, marker: &Marker) {
         let lines = prefix.lines(marker);
         let mut seen_content = false;
+        let mut blanks = Vec::new();
         for line in lines {
             match line {
                 PrefixLine::Blank { text } if !seen_content => self.leading_blanks.push(text),
-                PrefixLine::Blank { .. } => {}
-                PrefixLine::Prose { .. } | PrefixLine::Sample { .. } => seen_content = true,
+                PrefixLine::Blank { text } => blanks.push(text),
+                PrefixLine::Prose { .. } | PrefixLine::Sample { .. } => {
+                    seen_content = true;
+                    blanks.clear();
+                }
                 PrefixLine::User { text } => {
                     seen_content = true;
+                    if !self.user_lines.is_empty() {
+                        self.user_lines.append(&mut blanks);
+                    } else {
+                        blanks.clear();
+                    }
                     self.user_lines.push(text);
                 }
             }
+        }
+        if !self.user_lines.is_empty() {
+            self.user_lines.append(&mut blanks);
         }
         self.indent = prefix.indent().to_owned();
     }
