@@ -9,15 +9,25 @@ use crate::path::DottedPath;
 use crate::source::SourceDocument;
 
 /// Builder holding the marker, the rename rules and the output alignment.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MergeOptions {
     pub(crate) marker: Marker,
     pub(crate) migrations: Vec<Migration>,
     pub(crate) align: bool,
 }
 
+impl Default for MergeOptions {
+    fn default() -> Self {
+        Self {
+            marker: Marker::default(),
+            migrations: Vec::new(),
+            align: true,
+        }
+    }
+}
+
 impl MergeOptions {
-    /// The default marker and no rename rules.
+    /// The default marker, no rename rules, and `=` aligned.
     pub fn new() -> Self {
         Self::default()
     }
@@ -41,7 +51,8 @@ impl MergeOptions {
         self
     }
 
-    /// Lines up the `=` of every key in a section.
+    /// Whether to line up the `=` of every key in a section. On unless
+    /// turned off.
     ///
     /// A section is what sits under one `[table]` header, or above the first.
     /// Comments and blank lines between keys do not end it. A value written

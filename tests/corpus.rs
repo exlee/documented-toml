@@ -26,12 +26,13 @@ struct CorpusFile {
 ///
 /// A `--- DEF ---` section opens a group; the `--- USR ---` and `--- RES ---`
 /// pairs that follow all run against the same default. Flags after the
-/// delimiter set merge options for the whole group: `align` lines up `=`.
+/// delimiter set merge options for the whole group: `no-align` leaves the
+/// spacing around `=` as written.
 #[derive(Debug)]
 struct Group {
     /// The text of the `--- DEF ---` section.
     default_src: String,
-    /// Whether the group merges with `=` aligned.
+    /// Whether the group merges with `=` aligned. On unless `no-align`.
     align: bool,
     /// The cases stated against this default. A `--- DEF ---` with no
     /// `--- USR ---` after it is malformed, not empty.
@@ -190,10 +191,10 @@ impl CorpusFile {
                     if let Some((line, _)) = pending {
                         return Err(format!("{display}:{line}: --- USR --- with no --- RES ---"));
                     }
-                    let mut align = false;
+                    let mut align = true;
                     for flag in &section.flags {
                         match flag.as_str() {
-                            "align" => align = true,
+                            "no-align" => align = false,
                             other => {
                                 return Err(format!(
                                     "{}:{}: unknown flag {other}",
@@ -400,19 +401,19 @@ fn corpus_comments_are_stripped_and_lookalikes_are_not() {
 }
 
 #[test]
-fn a_default_section_takes_the_align_flag_and_nothing_else() {
+fn a_default_section_takes_the_no_align_flag_and_nothing_else() {
     let file = CorpusFile::parse(
         Path::new("x.txt"),
-        "--- DEF --- align\na = 1\n--- USR ---\n--- RES ---\na = 1\n",
+        "--- DEF --- no-align\na = 1\n--- USR ---\n--- RES ---\na = 1\n",
     )
     .unwrap();
-    assert!(file.groups.head.align);
+    assert!(!file.groups.head.align);
     let plain = CorpusFile::parse(
         Path::new("x.txt"),
         "--- DEF ---\na = 1\n--- USR ---\n--- RES ---\na = 1\n",
     )
     .unwrap();
-    assert!(!plain.groups.head.align);
+    assert!(plain.groups.head.align);
     let error = CorpusFile::parse(
         Path::new("x.txt"),
         "--- DEF --- wat\na = 1\n--- USR ---\n--- RES ---\na = 1\n",
@@ -421,7 +422,7 @@ fn a_default_section_takes_the_align_flag_and_nothing_else() {
     assert!(error.contains("unknown flag"), "{error}");
     let error = CorpusFile::parse(
         Path::new("x.txt"),
-        "--- DEF ---\na = 1\n--- USR --- align\n--- RES ---\na = 1\n",
+        "--- DEF ---\na = 1\n--- USR --- no-align\n--- RES ---\na = 1\n",
     )
     .unwrap_err();
     assert!(error.contains("only --- DEF ---"), "{error}");

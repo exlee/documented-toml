@@ -162,8 +162,9 @@ parents and dotted keys do not introduce headers or extra spacing.
 
 ### 4.4 Aligned values
 
-Off by default, because the person's spacing around `=` is theirs. Asked for,
-the merge pads every key in a section so their `=` share a column. A section
+The merge pads every key in a section so their `=` share a column. This is
+the one place the person's spacing is not kept; `align_values(false)` keeps
+it. A section
 is what sits under one `[table]` header, or above the first; each entry of an
 array of tables is one. Comments and blank lines between keys do not end the
 span. A key is measured with its indentation and its whole dotted path, the
@@ -203,7 +204,7 @@ place.
 # defaults                    # user                  # merged
 ##: This value is counter     counter = 3             ##: This value is counter
 counter = 1                   optional_counter = 5    #: counter = 1
-                                                      counter = 3
+                                                      counter          = 3
 ##: Optional counter
 #: optional_counter = 1                               ##: Optional counter
                                                       #: optional_counter = 1

@@ -1,7 +1,7 @@
-### `align` after `--- DEF ---` lines up the `=` of every key in a section.
-### The span is the whole section: the tool's prose, a recorded default, the
-### person's own comment and blank lines do not end it.
---- DEF --- align
+### The `=` of every key in a section is lined up. The span is the whole
+### section: the tool's prose, a recorded default, the person's own comment
+### and blank lines do not end it.
+--- DEF ---
 ##: First.
 a = 1
 
@@ -20,7 +20,7 @@ a      = 5
 # mine
 longer = 2
 ### Each header opens a span of its own, arrays of tables entry by entry.
---- DEF --- align
+--- DEF ---
 a = 1
 bb = 2
 [section]
@@ -42,7 +42,7 @@ c      = 4
 x  = 1
 yy = 2
 ### A dotted key is measured by its whole path, indentation included.
---- DEF --- align
+--- DEF ---
 [s]
 a.b = 1
   longer.key.path = 2
@@ -54,7 +54,7 @@ a.b               = 1
   longer.key.path = 2
 c                 = 3
 ### A value written over several lines keeps its own spacing and sets no width.
---- DEF --- align
+--- DEF ---
 a = 1
 longer = 2
 text = '''
@@ -74,7 +74,7 @@ list = [
   1,
 ]
 ### A person's own padding is recomputed; a section with one key is untouched.
---- DEF --- align
+--- DEF ---
 a = 1
 bb = 2
 [one]
@@ -90,8 +90,8 @@ bb = 2
 
 [one]
 only    = 1
-### Without the flag nothing moves.
---- DEF ---
+### `no-align` after `--- DEF ---` keeps the spacing as written.
+--- DEF --- no-align
 a = 1
 longer = 2
 --- USR ---

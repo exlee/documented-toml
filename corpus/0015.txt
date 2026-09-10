@@ -13,7 +13,7 @@ second = 8
 --- RES ---
 ##: The first option, with a paragraph of its own.
 #: first = 1
-first = 9
+first  = 9
 
 ##: The second, kept apart from the first.
 #: second = 2
@@ -27,7 +27,7 @@ second = 8
 --- RES ---
 ##: The first option, with a paragraph of its own.
 #: first = 1
-first = 9
+first  = 9
 
 
 ##: The second, kept apart from the first.

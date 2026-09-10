@@ -1,9 +1,19 @@
-use documented_toml::merge;
+//! Blank lines between keys and sections. Alignment is off here so the
+//! spacing stands on its own.
+
+use documented_toml::{MergeOptions, Merged};
+
+fn merge(defaults: &str, user: &str) -> Merged {
+    MergeOptions::new()
+        .align_values(false)
+        .merge(defaults, user)
+        .unwrap()
+}
 
 fn check(defaults: &str, user: &str, expected: &str) {
-    let merged = merge(defaults, user).unwrap().to_toml_string();
+    let merged = merge(defaults, user).to_toml_string();
     assert_eq!(merged, expected);
-    assert_eq!(merge(defaults, &merged).unwrap().to_toml_string(), merged);
+    assert_eq!(merge(defaults, &merged).to_toml_string(), merged);
 }
 
 #[test]
@@ -53,7 +63,7 @@ fn dotted_keys_do_not_introduce_section_spacing() {
 #[test]
 fn preserves_spacing_in_optional_examples() {
     let defaults = "##: Commands to run.\n#: commands = [\n#:   'echo  hello',\n#:   'printf    world',\n#: ]\n";
-    let first = merge(defaults, "").unwrap().to_toml_string();
+    let first = merge(defaults, "").to_toml_string();
     assert!(first.contains("#:   'echo  hello',\n#:   'printf    world',\n"));
     check(defaults, &first, &first);
 }

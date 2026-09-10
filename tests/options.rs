@@ -58,7 +58,7 @@ fn an_optional_key_the_person_has_set_merges_like_any_other() {
     .unwrap();
     assert_eq!(
         merged.to_toml_string(),
-        "##: This value is counter\n#: counter = 1\ncounter = 3\n\n##: Optional counter\n#: optional_counter = 1\noptional_counter = 5\n"
+        "##: This value is counter\n#: counter = 1\ncounter          = 3\n\n##: Optional counter\n#: optional_counter = 1\noptional_counter = 5\n"
     );
     assert!(merged.report.diagnostics().is_empty());
 }
@@ -192,17 +192,24 @@ fn a_block_naming_a_key_nobody_sets_stays_where_it_was_written() {
 }
 
 #[test]
-fn alignment_is_off_unless_asked() {
-    assert!(!MergeOptions::new().aligns_values());
-    let merged = merge("a = 1\nlonger = 2\n", "").unwrap();
-    assert_eq!(merged.to_toml_string(), "a = 1\nlonger = 2\n");
+fn alignment_is_on_unless_turned_off() {
+    assert!(MergeOptions::new().aligns_values());
+    assert_eq!(
+        merge("a = 1\nlonger = 2\n", "").unwrap().to_toml_string(),
+        "a      = 1\nlonger = 2\n"
+    );
+    let off = MergeOptions::new()
+        .align_values(false)
+        .merge("a = 1\nlonger = 2\n", "")
+        .unwrap();
+    assert_eq!(off.to_toml_string(), "a = 1\nlonger = 2\n");
 }
 
 #[test]
 fn alignment_spans_a_section_across_documentation_and_user_comments() {
     let defaults = "a = 1\n\n##: Prose.\nlonger = 2\n[s]\nx = 1\nyy = 2\n";
     let user = "a = 5\n# mine\nlonger = 2\n[s]\nx = 1\nyy = 2\n";
-    let options = MergeOptions::new().align_values(true);
+    let options = MergeOptions::new();
     let once = options.merge(defaults, user).unwrap().to_toml_string();
     assert_eq!(
         once,
@@ -216,10 +223,7 @@ fn alignment_spans_a_section_across_documentation_and_user_comments() {
 fn alignment_leaves_multiline_values_and_recorded_defaults_alone() {
     let defaults = "a = 1\nlonger = 2\ntext = '''\nx\n'''\n";
     let user = "a = 3\nlonger = 2\ntext = '''\ny\n'''\n";
-    let merged = MergeOptions::new()
-        .align_values(true)
-        .merge(defaults, user)
-        .unwrap();
+    let merged = merge(defaults, user).unwrap();
     assert_eq!(
         merged.to_toml_string(),
         "#: a = 1\na      = 3\nlonger = 2\n#: text = '''\nx\n'''\ntext = '''\ny\n'''\n"

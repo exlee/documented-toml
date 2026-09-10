@@ -1,7 +1,7 @@
 //! The `documented-toml` command.
 //!
 //! ```text
-//! documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--align]
+//! documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--no-align]
 //! documented-toml check --default D.toml --user U.toml
 //! ```
 
@@ -14,13 +14,13 @@ use documented_toml::{MergeOptions, Merged};
 
 const USAGE: &str = "\
 usage:
-  documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--align]
+  documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--no-align]
   documented-toml check --default D.toml --user U.toml
 
   merge  writes the merged document, to stdout unless --output or --in-place
   check  writes nothing
 
-  --align  lines up the = of every key in a section
+  --no-align  keeps the spacing around = as the person wrote it
 
 Both print diagnostics to stderr and exit non-zero when one of them is an error.
 ";
@@ -152,7 +152,7 @@ impl Invocation {
         let mut default = None;
         let mut user = None;
         let mut destination = Destination::Stdout;
-        let mut align = false;
+        let mut align = true;
         while let Some(argument) = arguments.next() {
             let mut value = |name: &str| {
                 arguments
@@ -165,7 +165,7 @@ impl Invocation {
                 "--user" => user = Some(PathBuf::from(value("--user")?)),
                 "--output" => destination = Destination::File(PathBuf::from(value("--output")?)),
                 "--in-place" => destination = Destination::InPlace,
-                "--align" => align = true,
+                "--no-align" => align = false,
                 other => return Err(format!("no such option: {other}\n\n{USAGE}")),
             }
         }
@@ -208,14 +208,14 @@ mod tests {
     }
 
     #[test]
-    fn align_is_off_unless_asked() {
+    fn align_is_on_unless_turned_off() {
         assert!(
-            !parse(&["merge", "--default", "d", "--user", "u"])
+            parse(&["merge", "--default", "d", "--user", "u"])
                 .unwrap()
                 .align
         );
-        let asked = parse(&["merge", "--default", "d", "--user", "u", "--align"]).unwrap();
-        assert!(asked.align);
+        let off = parse(&["merge", "--default", "d", "--user", "u", "--no-align"]).unwrap();
+        assert!(!off.align);
     }
 
     #[test]

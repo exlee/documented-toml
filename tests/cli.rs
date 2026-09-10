@@ -192,21 +192,33 @@ fn no_arguments_prints_the_usage() {
 }
 
 #[test]
-fn align_lines_up_the_equals_signs() {
-    let sandbox = Sandbox::new("align");
+fn no_align_keeps_the_spacing_as_written() {
+    let sandbox = Sandbox::new("no-align");
     let defaults = sandbox.write("d.toml", "a = 1\nlonger = 2\n");
     let user = sandbox.write("u.toml", "a = 5\n");
+    let aligned = sandbox.run(&[
+        arg("merge"),
+        arg("--default"),
+        &defaults,
+        arg("--user"),
+        &user,
+    ]);
+    assert!(aligned.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&aligned.stdout),
+        "#: a = 1\na      = 5\nlonger = 2\n"
+    );
     let output = sandbox.run(&[
         arg("merge"),
         arg("--default"),
         &defaults,
         arg("--user"),
         &user,
-        arg("--align"),
+        arg("--no-align"),
     ]);
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        "#: a = 1\na      = 5\nlonger = 2\n"
+        "#: a = 1\na = 5\nlonger = 2\n"
     );
 }
