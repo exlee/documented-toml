@@ -1,0 +1,100 @@
+### `align` after `--- DEF ---` lines up the `=` of every key in a section.
+### The span is the whole section: the tool's prose, a recorded default, the
+### person's own comment and blank lines do not end it.
+--- DEF --- align
+##: First.
+a = 1
+
+##: Second.
+longer = 2
+--- USR ---
+a = 5
+# mine
+longer = 2
+--- RES ---
+##: First.
+#: a = 1
+a      = 5
+
+##: Second.
+# mine
+longer = 2
+### Each header opens a span of its own, arrays of tables entry by entry.
+--- DEF --- align
+a = 1
+bb = 2
+[section]
+longer = 3
+c = 4
+[[items]]
+x = 1
+yy = 2
+--- USR ---
+--- RES ---
+a  = 1
+bb = 2
+
+[section]
+longer = 3
+c      = 4
+
+[[items]]
+x  = 1
+yy = 2
+### A dotted key is measured by its whole path, indentation included.
+--- DEF --- align
+[s]
+a.b = 1
+  longer.key.path = 2
+c = 3
+--- USR ---
+--- RES ---
+[s]
+a.b               = 1
+  longer.key.path = 2
+c                 = 3
+### A value written over several lines keeps its own spacing and sets no width.
+--- DEF --- align
+a = 1
+longer = 2
+text = '''
+x
+'''
+list = [
+  1,
+]
+--- USR ---
+--- RES ---
+a      = 1
+longer = 2
+text = '''
+x
+'''
+list = [
+  1,
+]
+### A person's own padding is recomputed; a section with one key is untouched.
+--- DEF --- align
+a = 1
+bb = 2
+[one]
+only = 1
+--- USR ---
+a        = 1
+bb = 2
+[one]
+only    = 1
+--- RES ---
+a  = 1
+bb = 2
+
+[one]
+only    = 1
+### Without the flag nothing moves.
+--- DEF ---
+a = 1
+longer = 2
+--- USR ---
+--- RES ---
+a = 1
+longer = 2

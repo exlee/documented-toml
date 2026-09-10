@@ -7,6 +7,7 @@
 use std::fs;
 use std::path::Path;
 
+use documented_toml::MergeOptions;
 use nonempty::NonEmpty;
 
 /// One `corpus/NNNN.txt` file.
@@ -24,11 +25,14 @@ struct CorpusFile {
 /// One default document and every case stated against it.
 ///
 /// A `--- DEF ---` section opens a group; the `--- USR ---` and `--- RES ---`
-/// pairs that follow all run against the same default.
+/// pairs that follow all run against the same default. Flags after the
+/// delimiter set merge options for the whole group: `align` lines up `=`.
 #[derive(Debug)]
 struct Group {
     /// The text of the `--- DEF ---` section.
     default_src: String,
+    /// Whether the group merges with `=` aligned.
+    align: bool,
     /// The cases stated against this default. A `--- DEF ---` with no
     /// `--- USR ---` after it is malformed, not empty.
     cases: NonEmpty<Case>,
@@ -51,6 +55,8 @@ struct Case {
 struct Section {
     /// Which delimiter opened it.
     kind: SectionKind,
+    /// The words after the delimiter.
+    flags: Vec<String>,
     /// 1-based line of the delimiter, for failure messages.
     line: usize,
     /// Everything between this delimiter and the next one.
@@ -103,10 +109,17 @@ fn delimiter(kind: SectionKind) -> &'static str {
     }
 }
 
-fn delimiter_kind(line: &str) -> Option<SectionKind> {
+/// The delimiter a line opens, with the flags written after it.
+fn delimiter_kind(line: &str) -> Option<(SectionKind, Vec<String>)> {
     [SectionKind::Def, SectionKind::Usr, SectionKind::Res]
         .into_iter()
-        .find(|kind| line == delimiter(*kind))
+        .find_map(|kind| {
+            let rest = line.strip_prefix(delimiter(kind))?;
+            if !rest.is_empty() && !rest.starts_with(' ') {
+                return None;
+            }
+            Some((kind, rest.split_whitespace().map(str::to_owned).collect()))
+        })
 }
 
 /// Whether a line is a note for the reader.
@@ -135,8 +148,9 @@ impl CorpusFile {
                 continue;
             }
             match delimiter_kind(line) {
-                Some(kind) => sections.push(Section {
+                Some((kind, flags)) => sections.push(Section {
                     kind,
+                    flags,
                     line: number,
                     text: String::new(),
                 }),
@@ -166,7 +180,7 @@ impl CorpusFile {
     }
 
     fn group(display: &str, sections: Vec<Section>) -> Result<Vec<Group>, String> {
-        let mut collected: Vec<(String, Vec<Case>)> = Vec::new();
+        let mut collected: Vec<(String, bool, Vec<Case>)> = Vec::new();
         let mut pending: Option<(usize, String)> = None;
         let mut index = 0;
 
@@ -176,7 +190,19 @@ impl CorpusFile {
                     if let Some((line, _)) = pending {
                         return Err(format!("{display}:{line}: --- USR --- with no --- RES ---"));
                     }
-                    collected.push((section.text, Vec::new()));
+                    let mut align = false;
+                    for flag in &section.flags {
+                        match flag.as_str() {
+                            "align" => align = true,
+                            other => {
+                                return Err(format!(
+                                    "{}:{}: unknown flag {other}",
+                                    display, section.line
+                                ));
+                            }
+                        }
+                    }
+                    collected.push((section.text, align, Vec::new()));
                 }
                 SectionKind::Usr => {
                     if collected.is_empty() {
@@ -188,6 +214,12 @@ impl CorpusFile {
                     if let Some((line, _)) = pending {
                         return Err(format!("{display}:{line}: --- USR --- with no --- RES ---"));
                     }
+                    if !section.flags.is_empty() {
+                        return Err(format!(
+                            "{}:{}: only --- DEF --- takes flags",
+                            display, section.line
+                        ));
+                    }
                     pending = Some((section.line, section.text));
                 }
                 SectionKind::Res => {
@@ -197,11 +229,17 @@ impl CorpusFile {
                             display, section.line
                         ));
                     };
+                    if !section.flags.is_empty() {
+                        return Err(format!(
+                            "{}:{}: only --- DEF --- takes flags",
+                            display, section.line
+                        ));
+                    }
                     index += 1;
                     collected
                         .last_mut()
                         .expect("a group exists once a case is pending")
-                        .1
+                        .2
                         .push(Case {
                             index,
                             user_src,
@@ -216,10 +254,14 @@ impl CorpusFile {
 
         collected
             .into_iter()
-            .map(|(default_src, cases)| {
+            .map(|(default_src, align, cases)| {
                 let cases = NonEmpty::from_vec(cases)
                     .ok_or_else(|| format!("{display}: a --- DEF --- states no cases"))?;
-                Ok(Group { default_src, cases })
+                Ok(Group {
+                    default_src,
+                    align,
+                    cases,
+                })
             })
             .collect()
     }
@@ -227,9 +269,17 @@ impl CorpusFile {
 
 // -- running ------------------------------------------------------------
 
+impl Group {
+    fn options(&self) -> MergeOptions {
+        MergeOptions::new().align_values(self.align)
+    }
+}
+
 impl Case {
-    fn run(&self, default_src: &str) -> CaseOutcome {
-        let merged = documented_toml::merge(default_src, &self.user_src)
+    fn run(&self, group: &Group) -> CaseOutcome {
+        let merged = group
+            .options()
+            .merge(&group.default_src, &self.user_src)
             .expect("a corpus case parses on both sides");
         let actual = merged.to_toml_string();
         CaseOutcome {
@@ -241,9 +291,11 @@ impl Case {
     /// Merging the output again against the same defaults must not move it.
     /// The merge is idempotent while the defaults are unchanged, which is what
     /// makes it safe to run on every start-up.
-    fn run_again(&self, default_src: &str, once: &str) -> CaseOutcome {
-        let merged =
-            documented_toml::merge(default_src, once).expect("merged output parses as TOML again");
+    fn run_again(&self, group: &Group, once: &str) -> CaseOutcome {
+        let merged = group
+            .options()
+            .merge(&group.default_src, once)
+            .expect("merged output parses as TOML again");
         let actual = merged.to_toml_string();
         CaseOutcome {
             passed: actual == once,
@@ -284,7 +336,7 @@ fn corpus_states_the_merge() {
     for file in CorpusHarness::files() {
         for group in &file.groups {
             for case in &group.cases {
-                let outcome = case.run(&group.default_src);
+                let outcome = case.run(group);
                 if !outcome.passed {
                     failures.push(format!(
                         "{} case {}:\n--- expected ---\n{}--- actual ---\n{}",
@@ -303,8 +355,8 @@ fn corpus_output_is_a_fixed_point() {
     for file in CorpusHarness::files() {
         for group in &file.groups {
             for case in &group.cases {
-                let once = case.run(&group.default_src).actual;
-                let outcome = case.run_again(&group.default_src, &once);
+                let once = case.run(group).actual;
+                let outcome = case.run_again(group, &once);
                 if !outcome.passed {
                     failures.push(format!(
                         "{} case {} moved on a second merge:\n--- once ---\n{}--- twice ---\n{}",
@@ -345,6 +397,39 @@ fn corpus_comments_are_stripped_and_lookalikes_are_not() {
     assert_eq!(file.comments[0].line, 1);
     assert!(file.groups.head.cases.head.user_src.contains("## kept"));
     assert!(file.groups.head.cases.head.expected.contains("#### kept"));
+}
+
+#[test]
+fn a_default_section_takes_the_align_flag_and_nothing_else() {
+    let file = CorpusFile::parse(
+        Path::new("x.txt"),
+        "--- DEF --- align\na = 1\n--- USR ---\n--- RES ---\na = 1\n",
+    )
+    .unwrap();
+    assert!(file.groups.head.align);
+    let plain = CorpusFile::parse(
+        Path::new("x.txt"),
+        "--- DEF ---\na = 1\n--- USR ---\n--- RES ---\na = 1\n",
+    )
+    .unwrap();
+    assert!(!plain.groups.head.align);
+    let error = CorpusFile::parse(
+        Path::new("x.txt"),
+        "--- DEF --- wat\na = 1\n--- USR ---\n--- RES ---\na = 1\n",
+    )
+    .unwrap_err();
+    assert!(error.contains("unknown flag"), "{error}");
+    let error = CorpusFile::parse(
+        Path::new("x.txt"),
+        "--- DEF ---\na = 1\n--- USR --- align\n--- RES ---\na = 1\n",
+    )
+    .unwrap_err();
+    assert!(error.contains("only --- DEF ---"), "{error}");
+    let lookalike = CorpusFile::parse(Path::new("x.txt"), "--- DEF ---x\n").unwrap_err();
+    assert!(
+        lookalike.contains("before the first delimiter"),
+        "{lookalike}"
+    );
 }
 
 #[test]
