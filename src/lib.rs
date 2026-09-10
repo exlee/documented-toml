@@ -7,6 +7,7 @@
 //! specified.
 #![doc = include_str!("../README.md")]
 
+pub(crate) mod align;
 pub mod decor;
 pub mod error;
 pub mod merge;

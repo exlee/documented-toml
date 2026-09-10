@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Align the `=` of every key in a section with `MergeOptions::align_values`
+  and the `--align` flag. Comments and blank lines do not end the span; values
+  written over several lines are left as they are.
+
 ## [0.1.2] - 2026-09-08
 
 ### Fixed

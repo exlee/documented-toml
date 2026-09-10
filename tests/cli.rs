@@ -190,3 +190,23 @@ fn no_arguments_prints_the_usage() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("usage:"));
 }
+
+#[test]
+fn align_lines_up_the_equals_signs() {
+    let sandbox = Sandbox::new("align");
+    let defaults = sandbox.write("d.toml", "a = 1\nlonger = 2\n");
+    let user = sandbox.write("u.toml", "a = 5\n");
+    let output = sandbox.run(&[
+        arg("merge"),
+        arg("--default"),
+        &defaults,
+        arg("--user"),
+        &user,
+        arg("--align"),
+    ]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "#: a = 1\na      = 5\nlonger = 2\n"
+    );
+}

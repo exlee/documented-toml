@@ -190,3 +190,38 @@ fn a_block_naming_a_key_nobody_sets_stays_where_it_was_written() {
         merged.to_toml_string()
     );
 }
+
+#[test]
+fn alignment_is_off_unless_asked() {
+    assert!(!MergeOptions::new().aligns_values());
+    let merged = merge("a = 1\nlonger = 2\n", "").unwrap();
+    assert_eq!(merged.to_toml_string(), "a = 1\nlonger = 2\n");
+}
+
+#[test]
+fn alignment_spans_a_section_across_documentation_and_user_comments() {
+    let defaults = "a = 1\n\n##: Prose.\nlonger = 2\n[s]\nx = 1\nyy = 2\n";
+    let user = "a = 5\n# mine\nlonger = 2\n[s]\nx = 1\nyy = 2\n";
+    let options = MergeOptions::new().align_values(true);
+    let once = options.merge(defaults, user).unwrap().to_toml_string();
+    assert_eq!(
+        once,
+        "#: a = 1\na      = 5\n\n##: Prose.\n# mine\nlonger = 2\n\n[s]\nx  = 1\nyy = 2\n"
+    );
+    let twice = options.merge(defaults, &once).unwrap().to_toml_string();
+    assert_eq!(twice, once);
+}
+
+#[test]
+fn alignment_leaves_multiline_values_and_recorded_defaults_alone() {
+    let defaults = "a = 1\nlonger = 2\ntext = '''\nx\n'''\n";
+    let user = "a = 3\nlonger = 2\ntext = '''\ny\n'''\n";
+    let merged = MergeOptions::new()
+        .align_values(true)
+        .merge(defaults, user)
+        .unwrap();
+    assert_eq!(
+        merged.to_toml_string(),
+        "#: a = 1\na      = 3\nlonger = 2\n#: text = '''\nx\n'''\ntext = '''\ny\n'''\n"
+    );
+}

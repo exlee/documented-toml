@@ -1,7 +1,7 @@
 //! The `documented-toml` command.
 //!
 //! ```text
-//! documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+//! documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--align]
 //! documented-toml check --default D.toml --user U.toml
 //! ```
 
@@ -14,11 +14,13 @@ use documented_toml::{MergeOptions, Merged};
 
 const USAGE: &str = "\
 usage:
-  documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+  documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--align]
   documented-toml check --default D.toml --user U.toml
 
   merge  writes the merged document, to stdout unless --output or --in-place
   check  writes nothing
+
+  --align  lines up the = of every key in a section
 
 Both print diagnostics to stderr and exit non-zero when one of them is an error.
 ";
@@ -39,6 +41,7 @@ fn run() -> Result<ExitCode, String> {
     let default_src = read(&invocation.default)?;
     let user_src = read(&invocation.user)?;
     let merged = MergeOptions::new()
+        .align_values(invocation.align)
         .merge(&default_src, &user_src)
         .map_err(|e| e.to_string())?;
 
@@ -133,6 +136,7 @@ struct Invocation {
     default: PathBuf,
     user: PathBuf,
     destination: Destination,
+    align: bool,
 }
 
 impl Invocation {
@@ -148,6 +152,7 @@ impl Invocation {
         let mut default = None;
         let mut user = None;
         let mut destination = Destination::Stdout;
+        let mut align = false;
         while let Some(argument) = arguments.next() {
             let mut value = |name: &str| {
                 arguments
@@ -160,6 +165,7 @@ impl Invocation {
                 "--user" => user = Some(PathBuf::from(value("--user")?)),
                 "--output" => destination = Destination::File(PathBuf::from(value("--output")?)),
                 "--in-place" => destination = Destination::InPlace,
+                "--align" => align = true,
                 other => return Err(format!("no such option: {other}\n\n{USAGE}")),
             }
         }
@@ -169,6 +175,7 @@ impl Invocation {
             default: default.ok_or("--default is required")?,
             user: user.ok_or("--user is required")?,
             destination,
+            align,
         };
         if invocation.command == Command::Check && invocation.destination != Destination::Stdout {
             return Err("check writes nothing, so it takes no --output or --in-place".to_owned());
@@ -198,6 +205,17 @@ mod tests {
         assert_eq!(to_file.destination, Destination::File(PathBuf::from("o")));
         let over_target = parse(&["merge", "--default", "d", "--user", "u", "--in-place"]).unwrap();
         assert_eq!(over_target.destination, Destination::InPlace);
+    }
+
+    #[test]
+    fn align_is_off_unless_asked() {
+        assert!(
+            !parse(&["merge", "--default", "d", "--user", "u"])
+                .unwrap()
+                .align
+        );
+        let asked = parse(&["merge", "--default", "d", "--user", "u", "--align"]).unwrap();
+        assert!(asked.align);
     }
 
     #[test]

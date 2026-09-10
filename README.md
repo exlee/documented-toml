@@ -103,6 +103,10 @@ let merged = MergeOptions::new()
 A migration runs when the old path exists and the new path does not. It moves
 the value and its user comments.
 
+`align_values(true)` lines up the `=` of every key in a section, whatever
+comments or blank lines sit between them. A value written over several lines
+keeps its own spacing and sets no width.
+
 Each merge includes a [`Report`](https://docs.rs/documented-toml/latest/documented_toml/struct.Report.html):
 
 - `UnknownKey`: warning; the value remains.
@@ -116,13 +120,13 @@ reports the selected line ending.
 ## Command line
 
 ```console
-documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--align]
 documented-toml check --default D.toml --user U.toml
 ```
 
 `merge` writes to stdout unless given `--output` or `--in-place`. `check` writes
 no document. Both commands print diagnostics to stderr and return a non-zero
-status for errors.
+status for errors. `--align` lines up the `=` of every key in a section.
 
 `--in-place` writes and syncs a sibling temporary file before renaming it over
 the user file.

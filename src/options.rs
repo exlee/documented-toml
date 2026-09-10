@@ -8,11 +8,12 @@ use crate::merge::{MergeEngine, Merged};
 use crate::path::DottedPath;
 use crate::source::SourceDocument;
 
-/// Builder holding the marker and the rename rules.
+/// Builder holding the marker, the rename rules and the output alignment.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MergeOptions {
     pub(crate) marker: Marker,
     pub(crate) migrations: Vec<Migration>,
+    pub(crate) align: bool,
 }
 
 impl MergeOptions {
@@ -38,6 +39,21 @@ impl MergeOptions {
             to: DottedPath::parse(to),
         });
         self
+    }
+
+    /// Lines up the `=` of every key in a section.
+    ///
+    /// A section is what sits under one `[table]` header, or above the first.
+    /// Comments and blank lines between keys do not end it. A value written
+    /// over several lines keeps its own spacing and sets no width.
+    pub fn align_values(mut self, yes: bool) -> Self {
+        self.align = yes;
+        self
+    }
+
+    /// Whether this merge lines up the `=` of every key in a section.
+    pub fn aligns_values(&self) -> bool {
+        self.align
     }
 
     /// The prefix this merge writes prose under.

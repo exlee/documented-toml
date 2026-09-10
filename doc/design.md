@@ -160,7 +160,17 @@ before its documentation or header. Existing separation is preserved. This
 also applies to nested sections and each entry in an array of tables; implicit
 parents and dotted keys do not introduce headers or extra spacing.
 
-### 4.4 Optional keys
+### 4.4 Aligned values
+
+Off by default, because the person's spacing around `=` is theirs. Asked for,
+the merge pads every key in a section so their `=` share a column. A section
+is what sits under one `[table]` header, or above the first; each entry of an
+array of tables is one. Comments and blank lines between keys do not end the
+span. A key is measured with its indentation and its whole dotted path, the
+way it is written. A value written over several lines, such as a `'''` string
+or a multi-line array, keeps its own spacing and sets no width.
+
+### 4.5 Optional keys
 
 A `#:` line is TOML, so a run of them is a document: the options an application
 cannot ship a value for, written out as the person would write them.
@@ -251,7 +261,7 @@ A sample line directly above a key, with no blank line between, is that key's
 recorded default under section 4.2 and not a block of its own. A sample for a
 different option belongs a blank line away.
 
-### 4.5 Text after the last key
+### 4.6 Text after the last key
 
 Marker lines the defaults put after their last key belong to no key. They reach
 the user's file all the same, at the end of it, above whatever the person wrote

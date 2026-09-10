@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use toml_edit::{ArrayOfTables, Decor, DocumentMut, Item, Key, Table, Value};
 
+use crate::align::align_sections;
 use crate::decor::{DefaultEcho, DocBlock, Marker, Prefix, PrefixLine, Sample};
 use crate::options::{MergeOptions, ResolvedMigration};
 use crate::path::DottedPath;
@@ -143,6 +144,9 @@ impl MergeEngine {
         self.merge_table(&defaults, &user, &mut root, None);
         renumber_tables(&mut root, &mut 0);
         space_sections(&mut root, &mut false, false);
+        if self.options.align {
+            align_sections(&mut root);
+        }
 
         let mut document = DocumentMut::new();
         *document.as_table_mut() = root;
