@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-10
+
 ### Added
 
 - Align the `=` of every key in a section. Comments and blank lines do not end

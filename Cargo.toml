@@ -1,6 +1,6 @@
 [package]
 name = "documented-toml"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.85"
 description = "Format-preserving merge of a person's TOML configuration with the documented defaults an application ships."
