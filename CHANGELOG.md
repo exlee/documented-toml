@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-15
+
 ### Changed
 
 - A comment or blank line ends an alignment group. Keys separated by them no
