@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-15
+
+### Fixed
+
+- Keep the documented-but-unset keys of an array of tables' first entry inside
+  that entry, above the next entry's header, instead of below the last entry.
+
 ## [0.1.3] - 2026-09-10
 
 ### Added
