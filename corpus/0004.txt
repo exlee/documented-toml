@@ -15,7 +15,7 @@ first = 1
 # and a second line about it
 second = 9
 --- RES ---
-first  = 1
+first = 1
 
 ##: What the second one does.
 #: second = 2

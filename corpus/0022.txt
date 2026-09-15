@@ -1,24 +1,32 @@
-### The `=` of every key in a section is lined up. The span is the whole
-### section: the tool's prose, a recorded default, the person's own comment
-### and blank lines do not end it.
+### The `=` of keys that follow each other directly are lined up. The tool's
+### prose, a recorded default, the person's own comment and blank lines each
+### start a new group; a key alone in its group gets one space.
 --- DEF ---
-##: First.
-a = 1
+protocol = "imap"
 
-##: Second.
-longer = 2
+##: Server.
+host = "imap.example.com"
+port = 993
+security = "tls"
+
+username = "jane"
 --- USR ---
-a = 5
-# mine
-longer = 2
+protocol = "imap"
+host     = "imap.fastmail.com"
+port     = 993
+security = "tls"
+username = "me"
 --- RES ---
-##: First.
-#: a = 1
-a      = 5
+protocol = "imap"
 
-##: Second.
-# mine
-longer = 2
+##: Server.
+#: host = "imap.example.com"
+host     = "imap.fastmail.com"
+port     = 993
+security = "tls"
+
+#: username = "jane"
+username = "me"
 ### Each header opens a span of its own, arrays of tables entry by entry.
 --- DEF ---
 a = 1
@@ -73,7 +81,7 @@ x
 list = [
   1,
 ]
-### A person's own padding is recomputed; a section with one key is untouched.
+### A person's own padding is recomputed, down to one space for a lone key.
 --- DEF ---
 a = 1
 bb = 2
@@ -89,7 +97,7 @@ a  = 1
 bb = 2
 
 [one]
-only    = 1
+only = 1
 ### `no-align` after `--- DEF ---` keeps the spacing as written.
 --- DEF --- no-align
 a = 1

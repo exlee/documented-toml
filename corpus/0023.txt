@@ -45,7 +45,7 @@ declared = 1
 ##: How an identity is written:
 [[identities]]
 #: name = "work"
-name               = "default"
+name = "default"
 
 ##: Who it inherits from.
 #: inherit = ["corporate"]

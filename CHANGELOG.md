@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A comment or blank line ends an alignment group. Keys separated by them no
+  longer share a column, and a key alone in its group gets one space.
+
 ## [0.1.4] - 2026-09-15
 
 ### Fixed

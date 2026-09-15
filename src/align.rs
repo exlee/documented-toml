@@ -1,8 +1,9 @@
-//! Lining up the `=` of every key in a section.
+//! Lining up the `=` of every key in a group.
 //!
 //! A section is the run of key-value pairs under one `[table]` header, or
-//! above the first one. The keys in it are padded after their name so every
-//! `=` sits in one column, whatever comment or blank line sits between them.
+//! above the first one. A comment or blank line above a key starts a new group
+//! within it. The keys of a group are padded after their name so every `=`
+//! sits in one column; a key alone in its group gets one space.
 //! A value written over several lines, such as a `'''` string or a multi-line
 //! array, is left as it is and sets no width: its `=` is its own affair.
 
@@ -11,8 +12,15 @@ use toml_edit::{Item, Key, Table};
 /// Aligns every section under `table`, itself included.
 pub(crate) fn align_sections(table: &mut Table) {
     align_section(table);
+    align_subsections(table);
+}
+
+/// Aligns the sections under `table`. A dotted table belongs to the section
+/// that holds it, so only the headed tables below it are reached.
+fn align_subsections(table: &mut Table) {
     for (_, item) in table.iter_mut() {
         match item {
+            Item::Table(sub) if sub.is_dotted() => align_subsections(sub),
             Item::Table(sub) => align_sections(sub),
             Item::ArrayOfTables(array) => {
                 for entry in array.iter_mut() {
@@ -30,37 +38,61 @@ struct Entry {
     path: Vec<String>,
     /// Characters from the start of the line to the end of the key text.
     width: usize,
+    /// Whether a comment or blank line sits above this key, or above a key
+    /// skipped since the previous entry.
+    separated: bool,
 }
 
 /// Pads the keys directly in `table`, and in the dotted tables under it, so
-/// their `=` share a column. Tables with a header of their own are sections
-/// of their own and are left for [`align_sections`] to reach.
+/// the `=` of each group share a column. Tables with a header of their own are
+/// sections of their own and are left for [`align_sections`] to reach.
 fn align_section(table: &mut Table) {
     let mut entries = Vec::new();
-    collect(table, &mut Vec::new(), String::new(), &mut entries);
-    let Some(widest) = entries.iter().map(|entry| entry.width).max() else {
-        return;
-    };
-    if entries.len() < 2 {
-        return;
-    }
+    let mut separated = false;
+    collect(
+        table,
+        &mut Vec::new(),
+        String::new(),
+        &mut separated,
+        &mut entries,
+    );
+    let mut groups: Vec<Vec<Entry>> = Vec::new();
     for entry in entries {
-        let Some(mut key) = key_at(table, &entry.path) else {
-            continue;
-        };
-        let suffix = " ".repeat(widest - entry.width + 1);
-        key.leaf_decor_mut().set_suffix(suffix);
+        match groups.last_mut() {
+            Some(group) if !entry.separated => group.push(entry),
+            _ => groups.push(vec![entry]),
+        }
+    }
+    for group in groups {
+        let widest = group.iter().map(|entry| entry.width).max().unwrap_or(0);
+        for entry in group {
+            let Some(mut key) = key_at(table, &entry.path) else {
+                continue;
+            };
+            let suffix = " ".repeat(widest - entry.width + 1);
+            key.leaf_decor_mut().set_suffix(suffix);
+        }
     }
 }
 
 /// Every inline key-value pair of a section, with the text that precedes its
 /// `=` measured the way the encoder writes it: the indentation, the key, and
-/// each dotted segment with the decor around its dot.
-fn collect(table: &Table, path: &mut Vec<String>, above: String, out: &mut Vec<Entry>) {
+/// each dotted segment with the decor around its dot. `separated` carries a
+/// comment or blank line forward to the next entry pushed.
+fn collect(
+    table: &Table,
+    path: &mut Vec<String>,
+    above: String,
+    separated: &mut bool,
+    out: &mut Vec<Entry>,
+) {
     for (name, item) in table.iter() {
         let Some(key) = table.key(name) else {
             continue;
         };
+        if decor_text(key.leaf_decor().prefix(), "").contains('\n') {
+            *separated = true;
+        }
         path.push(name.to_owned());
         let mut text = above.clone();
         if path.len() > 1 {
@@ -71,7 +103,7 @@ fn collect(table: &Table, path: &mut Vec<String>, above: String, out: &mut Vec<E
         match item {
             Item::Table(sub) if sub.is_dotted() => {
                 text.push_str(decor_text(key.dotted_decor().suffix(), ""));
-                collect(sub, path, text, out);
+                collect(sub, path, text, separated, out);
             }
             Item::Value(value) => {
                 let dotted_inline = value
@@ -82,6 +114,7 @@ fn collect(table: &Table, path: &mut Vec<String>, above: String, out: &mut Vec<E
                     out.push(Entry {
                         path: path.clone(),
                         width,
+                        separated: std::mem::take(separated),
                     });
                 }
             }
@@ -131,9 +164,24 @@ mod tests {
     }
 
     #[test]
-    fn comments_and_blank_lines_do_not_end_the_span() {
-        let out = aligned("a = 1\n# note\n\n##: prose\nlonger = 2\n");
-        assert_eq!(out, "a      = 1\n# note\n\n##: prose\nlonger = 2\n");
+    fn comments_and_blank_lines_start_a_new_group() {
+        let out = aligned("a = 1\nbb = 2\n# note\nlonger = 3\nc = 4\n\nd     = 5\n");
+        assert_eq!(
+            out,
+            "a  = 1\nbb = 2\n# note\nlonger = 3\nc      = 4\n\nd = 5\n"
+        );
+    }
+
+    #[test]
+    fn a_comment_above_a_dotted_key_starts_a_new_group() {
+        let out = aligned("longer = 1\n# note\na.b = 2\na.cc = 3\n");
+        assert_eq!(out, "longer = 1\n# note\na.b  = 2\na.cc = 3\n");
+    }
+
+    #[test]
+    fn a_comment_above_a_skipped_multiline_value_still_separates() {
+        let out = aligned("longer = 1\n# note\ntext = '''\nx\n'''\nb = 2\n");
+        assert_eq!(out, "longer = 1\n# note\ntext = '''\nx\n'''\nb = 2\n");
     }
 
     #[test]
@@ -165,8 +213,8 @@ mod tests {
     }
 
     #[test]
-    fn a_lone_key_is_left_alone() {
-        assert_eq!(aligned("a   = 1\n"), "a   = 1\n");
+    fn a_lone_key_gets_one_space() {
+        assert_eq!(aligned("a   = 1\n"), "a = 1\n");
     }
 
     #[test]

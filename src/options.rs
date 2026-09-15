@@ -55,7 +55,7 @@ impl MergeOptions {
     /// turned off.
     ///
     /// A section is what sits under one `[table]` header, or above the first.
-    /// Comments and blank lines between keys do not end it. A value written
+    /// A comment or blank line starts a new group within it. A value written
     /// over several lines keeps its own spacing and sets no width.
     pub fn align_values(mut self, yes: bool) -> Self {
         self.align = yes;

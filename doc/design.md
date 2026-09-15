@@ -162,12 +162,12 @@ parents and dotted keys do not introduce headers or extra spacing.
 
 ### 4.4 Aligned values
 
-The merge pads every key in a section so their `=` share a column. This is
+The merge pads the keys of each group so their `=` share a column. This is
 the one place the person's spacing is not kept; `align_values(false)` keeps
-it. A section
-is what sits under one `[table]` header, or above the first; each entry of an
-array of tables is one. Comments and blank lines between keys do not end the
-span. A key is measured with its indentation and its whole dotted path, the
+it. A group is a run of keys within one section with no comment or blank line
+between them; a key alone in its group gets one space. A section is what sits
+under one `[table]` header, or above the first; each entry of an array of
+tables is one. A key is measured with its indentation and its whole dotted path, the
 way it is written. A value written over several lines, such as a `'''` string
 or a multi-line array, keeps its own spacing and sets no width.
 

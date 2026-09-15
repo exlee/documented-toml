@@ -103,8 +103,8 @@ let merged = MergeOptions::new()
 A migration runs when the old path exists and the new path does not. It moves
 the value and its user comments.
 
-The `=` of every key in a section is lined up, whatever comments or blank
-lines sit between them. A value written over several lines keeps its own
+The `=` of keys on consecutive lines is lined up. A comment or blank line
+starts a new group, and a key alone in its group gets one space. A value written over several lines keeps its own
 spacing and sets no width. `align_values(false)` keeps the spacing as the
 person wrote it.
 

@@ -58,7 +58,7 @@ fn an_optional_key_the_person_has_set_merges_like_any_other() {
     .unwrap();
     assert_eq!(
         merged.to_toml_string(),
-        "##: This value is counter\n#: counter = 1\ncounter          = 3\n\n##: Optional counter\n#: optional_counter = 1\noptional_counter = 5\n"
+        "##: This value is counter\n#: counter = 1\ncounter = 3\n\n##: Optional counter\n#: optional_counter = 1\noptional_counter = 5\n"
     );
     assert!(merged.report.diagnostics().is_empty());
 }
@@ -206,14 +206,14 @@ fn alignment_is_on_unless_turned_off() {
 }
 
 #[test]
-fn alignment_spans_a_section_across_documentation_and_user_comments() {
-    let defaults = "a = 1\n\n##: Prose.\nlonger = 2\n[s]\nx = 1\nyy = 2\n";
-    let user = "a = 5\n# mine\nlonger = 2\n[s]\nx = 1\nyy = 2\n";
+fn documentation_and_user_comments_end_an_alignment_group() {
+    let defaults = "a = 1\nbb = 1\n\n##: Prose.\nlonger = 2\nc = 3\n[s]\nx = 1\nyy = 2\n";
+    let user = "a     = 5\nbb    = 1\nlonger = 2\n# mine\nc      = 3\n[s]\nx = 1\nyy = 2\n";
     let options = MergeOptions::new();
     let once = options.merge(defaults, user).unwrap().to_toml_string();
     assert_eq!(
         once,
-        "#: a = 1\na      = 5\n\n##: Prose.\n# mine\nlonger = 2\n\n[s]\nx  = 1\nyy = 2\n"
+        "#: a = 1\na  = 5\nbb = 1\n\n##: Prose.\nlonger = 2\n# mine\nc = 3\n\n[s]\nx  = 1\nyy = 2\n"
     );
     let twice = options.merge(defaults, &once).unwrap().to_toml_string();
     assert_eq!(twice, once);
