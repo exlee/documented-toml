@@ -1,0 +1,102 @@
+### The first entry of an array of tables is the one documented, so every key
+### documented for it is written inside it, the ones nobody set included. They
+### go above the next entry's header, not below the last entry, where they
+### would read as belonging to that one. Further examples still follow the
+### whole array.
+--- DEF ---
+##: The only declared option.
+declared = 1
+
+##: How an identity is written:
+#: [[identities]]
+#: name = "work"
+
+##: Who it inherits from.
+#: inherit = ["corporate"]
+
+##: Where the signature goes.
+#: signature_position = "after-quoted"
+
+##: What the composer switches to.
+#: prefer_compose = "none"
+
+##: Default headers.
+#: [identities.options]
+#: bcc = ["archive@example.com"]
+
+##: Another identity.
+#: [[identities]]
+#: name = "lists"
+--- USR ---
+declared = 1
+
+[[identities]]
+name = "default"
+signature_position = "before-quoted"
+
+# my second identity
+[[identities]]
+name = "alt"
+inherit = "default"
+--- RES ---
+##: The only declared option.
+declared = 1
+
+##: How an identity is written:
+[[identities]]
+#: name = "work"
+name               = "default"
+
+##: Who it inherits from.
+#: inherit = ["corporate"]
+
+##: Where the signature goes.
+#: signature_position = "after-quoted"
+signature_position = "before-quoted"
+
+##: What the composer switches to.
+#: prefer_compose = "none"
+
+##: Default headers.
+#: [identities.options]
+#: bcc = ["archive@example.com"]
+
+# my second identity
+[[identities]]
+name    = "alt"
+inherit = "default"
+
+##: Another identity.
+#: [[identities]]
+#: name = "lists"
+### A single entry has nothing after it, so the same keys close the array.
+--- USR ---
+declared = 1
+
+[[identities]]
+name = "default"
+--- RES ---
+##: The only declared option.
+declared = 1
+
+##: How an identity is written:
+[[identities]]
+#: name = "work"
+name = "default"
+
+##: Who it inherits from.
+#: inherit = ["corporate"]
+
+##: Where the signature goes.
+#: signature_position = "after-quoted"
+
+##: What the composer switches to.
+#: prefer_compose = "none"
+
+##: Default headers.
+#: [identities.options]
+#: bcc = ["archive@example.com"]
+
+##: Another identity.
+#: [[identities]]
+#: name = "lists"

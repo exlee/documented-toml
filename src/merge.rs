@@ -349,6 +349,22 @@ impl MergeEngine {
                     self.merge_table(&Table::new(), entry, &mut merged, Some(path));
                     *entry = merged;
                 }
+                // What the first entry documents and nobody set belongs to that
+                // entry, so it is written above the header of the next one.
+                // The tool's lines already there are written again.
+                let unset = std::mem::take(&mut self.pending);
+                for (index, entry) in array.iter_mut().enumerate().skip(1) {
+                    let mut block = DocBlock::default();
+                    block.keep_user_text(&Prefix::of(entry.decor()), self.marker());
+                    if index == 1 && !unset.is_empty() {
+                        block.floating = unset.clone();
+                        block.floating.push(String::new());
+                    }
+                    entry.decor_mut().set_prefix(block.render(self.marker()));
+                }
+                if array.len() < 2 {
+                    self.pending = unset;
+                }
                 // Entries the template has beyond the first are further
                 // examples, not the shape of what is already there. They stay
                 // written out, like any optional key nobody has set.
