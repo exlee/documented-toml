@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- `Merged::set(path, value)`, writing a value into the person's file where
+  the defaults say it goes: a `#:` line becomes a live key under it, in the
+  section and the order the defaults gave it. A key they already set is
+  rewritten in place, keeping their comments. It merges again, so the report
+  afterwards describes the file as it stands.
+- `Error::SetPath` and `Error::NotAValue`, which is what `set` answers for an
+  unreadable path and for a path where a table already sits.
+
 ## [0.3.0] - 2026-09-26
 
 ### Changed

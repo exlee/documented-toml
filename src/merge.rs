@@ -6,6 +6,7 @@ use toml_edit::{ArrayOfTables, Decor, DocumentMut, Item, Key, Table, Value};
 
 use crate::align::align_sections;
 use crate::decor::{DefaultEcho, DocBlock, Marker, Prefix, PrefixLine, Sample};
+use crate::error::Error;
 use crate::options::{MergeOptions, ResolvedMigration};
 use crate::path::DottedPath;
 use crate::report::{Diagnostic, DiagnosticKind, Position, Report, SpanIndex, TomlType};
@@ -28,6 +29,11 @@ pub struct Merged {
     pub(crate) document: DocumentMut,
     /// The line ending the person's file was written with.
     pub(crate) newline: Newline,
+    /// The defaults this came from, kept so [`Merged::set`] can merge again
+    /// and put a newly set value where the defaults say it goes.
+    pub(crate) defaults: String,
+    /// The options that produced it, kept for the same reason.
+    pub(crate) options: MergeOptions,
 }
 
 /// How a file ends its lines.
@@ -82,6 +88,46 @@ impl Merged {
     /// [`Merged::to_toml_string`] writes.
     pub fn newline(&self) -> Newline {
         self.newline
+    }
+
+    /// Sets a value in the person's file, where the defaults say it goes.
+    ///
+    /// A key that was a `#:` line becomes a live key under it, in the section
+    /// and the order the defaults gave it, with the shipped default recorded
+    /// above when the two differ. A key they already set is rewritten in
+    /// place, keeping their comments and the blank lines around them. A key
+    /// the defaults do not declare is kept too, and reported as
+    /// [`DiagnosticKind::UnknownKey`].
+    ///
+    /// The path is read as a TOML key path, so a quoted segment holding a dot
+    /// is one segment. Tables above it are created as needed.
+    ///
+    /// This merges again, so [`Merged::report`] afterwards describes the
+    /// document as it now stands: setting a value of the wrong type leaves it
+    /// in the file and reports [`DiagnosticKind::TypeMismatch`], the same as
+    /// if the person had written it there themselves.
+    ///
+    /// ```
+    /// # use documented_toml::merge;
+    /// let mut merged = merge("##: How many.\ncount = 1\nother = 2\n", "other = 5\n")?;
+    /// merged.set("count", 7)?;
+    /// assert_eq!(
+    ///     merged.to_toml_string(),
+    ///     "##: How many.\n#: count = 1\ncount = 7\n#: other = 2\nother = 5\n"
+    /// );
+    /// # Ok::<(), documented_toml::Error>(())
+    /// ```
+    pub fn set(&mut self, path: &str, value: impl Into<Value>) -> Result<(), Error> {
+        let parsed = DottedPath::parse(path).map_err(|source| Error::SetPath { source })?;
+        let mut document = self.document.clone();
+        if !assign(document.as_table_mut(), &parsed, value.into()) {
+            return Err(Error::NotAValue {
+                path: path.to_owned(),
+            });
+        }
+        let text = self.newline.apply(document.to_string());
+        *self = self.options.merge(&self.defaults, &text)?;
+        Ok(())
     }
 
     /// Whether the person set a value at this dotted path.
@@ -191,6 +237,8 @@ impl MergeEngine {
             report: self.report,
             document,
             newline: Newline::of(&self.user_src),
+            defaults: String::new(),
+            options: self.options,
         }
     }
 
@@ -1157,6 +1205,44 @@ fn take(root: &mut Table, path: &DottedPath) -> Option<(Key, Item)> {
         table = table.get_mut(segment)?.as_table_mut()?;
     }
     None
+}
+
+/// Writes a value at a path, creating the tables above it as implicit ones.
+/// Answers whether the path names somewhere a value can go.
+///
+/// An existing value is replaced through its slot, so the key keeps the
+/// person's comments and the blank lines around it. Where the spacing around
+/// the `=` is concerned the merge that follows lines it up again.
+fn assign(root: &mut Table, path: &DottedPath, value: Value) -> bool {
+    let mut table = root;
+    let mut segments = path.segments().peekable();
+    while let Some(segment) = segments.next() {
+        if segments.peek().is_none() {
+            return match table.get_mut(segment) {
+                Some(item) if matches!(item, Item::Value(_) | Item::None) => {
+                    *item = Item::Value(value);
+                    true
+                }
+                // A table or an array of tables is there instead, and
+                // overwriting it would throw away everything under it.
+                Some(_) => false,
+                None => {
+                    table.insert(segment, Item::Value(value));
+                    true
+                }
+            };
+        }
+        let entry = table.entry(segment).or_insert_with(|| {
+            let mut created = Table::new();
+            created.set_implicit(true);
+            Item::Table(created)
+        });
+        match entry.as_table_mut() {
+            Some(sub) => table = sub,
+            None => return false,
+        }
+    }
+    false
 }
 
 /// Inserts at a path, creating the tables above it as implicit ones. Answers

@@ -145,6 +145,22 @@ So the values come from two places: the defaults you passed in, overlaid by the
 merged document. Keep the defaults in TOML files of their own if you want them
 per platform, compose them, and pass the composed text to both steps.
 
+`set` writes a value into the file where the defaults say it goes, turning a
+`#:` line into a live key under it:
+
+```rust
+# let default_src = "##: How many.\ncount = 1\nlimit = 10\n";
+let mut merged = documented_toml::merge(default_src, "")?;
+merged.set("limit", 50)?;
+assert_eq!(
+    merged.to_toml_string(),
+    "##: How many.\n#: count = 1\n#: limit = 10\nlimit = 50\n"
+);
+# Ok::<(), documented_toml::Error>(())
+```
+
+It merges again, so the report afterwards describes the file as it now stands.
+
 ## Command line
 
 ```console

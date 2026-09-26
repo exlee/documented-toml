@@ -34,6 +34,19 @@ pub enum Error {
         /// The underlying parse failure.
         source: TomlError,
     },
+    /// [`Merged::set`](crate::Merged::set) was given a path that is not a
+    /// TOML key path.
+    SetPath {
+        /// The underlying parse failure.
+        source: TomlError,
+    },
+    /// [`Merged::set`](crate::Merged::set) was given a path where a table or
+    /// an array of tables already sits. Writing a value there would throw
+    /// away everything under it.
+    NotAValue {
+        /// The path as it was given.
+        path: String,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -47,6 +60,10 @@ impl std::fmt::Display for Error {
             Self::MigrationPath { source } => {
                 write!(f, "a rename rule has an unreadable path: {source}")
             }
+            Self::SetPath { source } => write!(f, "unreadable path: {source}"),
+            Self::NotAValue { path } => {
+                write!(f, "{path} holds a table, so no value can be set there")
+            }
         }
     }
 }
@@ -56,8 +73,9 @@ impl std::error::Error for Error {
         match self {
             Self::DefaultParse { source }
             | Self::UserParse { source }
-            | Self::MigrationPath { source } => Some(source),
-            Self::DefaultsDeclareNoKeys => None,
+            | Self::MigrationPath { source }
+            | Self::SetPath { source } => Some(source),
+            Self::DefaultsDeclareNoKeys | Self::NotAValue { .. } => None,
         }
     }
 }

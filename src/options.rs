@@ -115,7 +115,12 @@ impl MergeOptions {
         let (user, spans) = SourceDocument::parse_with_spans(user_src)
             .map_err(|source| Error::UserParse { source })?;
         let migrations = self.resolved_migrations()?;
-        Ok(MergeEngine::new(defaults, user, user_src, self.clone(), migrations, spans).run())
+        let mut merged =
+            MergeEngine::new(defaults, user, user_src, self.clone(), migrations, spans).run();
+        // Kept so `Merged::set` can merge again, which is what puts a newly
+        // set value where the defaults say it goes.
+        merged.defaults = default_src.to_owned();
+        Ok(merged)
     }
 
     fn resolved_migrations(&self) -> Result<Vec<ResolvedMigration>, Error> {

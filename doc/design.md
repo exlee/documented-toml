@@ -404,6 +404,7 @@ impl MergeOptions {
 pub struct Merged { pub report: Report, /* document, newline */ }
 
 impl Merged {
+    pub fn set(&mut self, path: &str, value: impl Into<Value>) -> Result<(), Error>;
     pub fn document(&self) -> &toml_edit::DocumentMut;
     pub fn to_toml_string(&self) -> String;
     pub fn newline(&self) -> Newline;
@@ -444,6 +445,16 @@ without declaring it, and a zero-byte defaults document is a separate case and
 is allowed. `migrate` takes its paths as written and reads
 them as TOML key paths at merge time, so an unreadable one fails the merge,
 not the builder call.
+
+`set(path, value)` writes a value into the person's file. It puts the value in
+the document and merges again, which is what positions it: the merge walks the
+defaults as the spine, so a key that was a `#:` line comes back as a live key
+under it, in the section and the order the defaults gave it, and the recorded
+default appears above it when the two differ. Merging again also means the
+report describes the document as it now stands, so a value of the wrong type
+is kept and reported exactly as if the person had written it there. `Merged`
+keeps the defaults text and the options for this, which is the whole reason it
+holds them.
 
 `to_toml_string()` produces the file to write back. `document()` is the same
 content for callers that want to deserialize it, which is what the person set
