@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-26
+
 ### Changed
 
 - A section whose keys are all commented keeps its `[table]` header live, so
