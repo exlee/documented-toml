@@ -1,0 +1,62 @@
+### What the person set is what the file holds. A default they left alone is a
+### `#:` line, so reading the file back says which values are theirs.
+--- DEF ---
+##: How many.
+count = 1
+
+##: How long.
+timeout = 30
+--- USR ---
+count = 7
+--- RES ---
+##: How many.
+#: count = 1
+count = 7
+
+##: How long.
+#: timeout = 30
+### A default written out unchanged is a value they chose, and stays live.
+--- USR ---
+count = 1
+--- RES ---
+##: How many.
+count = 1
+
+##: How long.
+#: timeout = 30
+### The `#:` lines are read back as the defaults they came from, so a merge of
+### the merged file moves nothing: the person can run this on every start-up.
+--- USR ---
+##: How many.
+#: count = 1
+count = 7
+
+##: How long.
+#: timeout = 30
+--- RES ---
+##: How many.
+#: count = 1
+count = 7
+
+##: How long.
+#: timeout = 30
+### Keys written against each other stay against each other: the spacing is
+### the spacing the defaults were written with, whether or not a key is live.
+--- DEF ---
+[db]
+host = "localhost"
+port = 5432
+
+##: The pool.
+pool = 8
+--- USR ---
+[db]
+port = 6000
+--- RES ---
+[db]
+#: host = "localhost"
+#: port = 5432
+port = 6000
+
+##: The pool.
+#: pool = 8

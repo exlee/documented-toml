@@ -65,14 +65,20 @@ Result:
 timeout = 120
 
 ##: Where logs are written. An empty path means stderr.
-log     = ""
+#: log = ""
 
 ##: Maximum cache entries.
 #: cache_size = 4096
 ```
 
-New settings come from the defaults. Overridden defaults become `#:` lines, so
-the shipped value remains visible. Optional settings stay commented.
+The file holds what the user set. Everything else is a `#:` line, so the
+shipped value is visible without the file claiming they chose it. Ask
+`Merged::user_set("log")` which values are theirs, and take the rest from the
+defaults you passed in.
+
+`MergeOptions::defaults_commented(false)` (`--live-defaults`) writes every
+default as a live key instead, which makes the merged document the effective
+configuration and makes `user_set` tell you nothing.
 
 ## Library
 
@@ -118,17 +124,38 @@ Use `merged.document()` to borrow the resulting `toml_edit::DocumentMut`, or
 `merged.into_document()` to take it for deserialization. `merged.newline()`
 reports the selected line ending.
 
+## Defaults and what the user chose
+
+A default nobody set is a `#:` line, not a key, so the merged document holds
+the user's choices and nothing else:
+
+```rust
+# let default_src = "count = 1\nlimit = 10\n";
+# let user_src = "count = 7\n";
+let merged = documented_toml::merge(default_src, user_src)?;
+assert!(merged.user_set("count"));
+assert!(!merged.user_set("limit"));
+# assert_eq!(merged.to_toml_string(), "#: count = 1\ncount = 7\n#: limit = 10\n");
+# Ok::<(), documented_toml::Error>(())
+```
+
+So the values come from two places: the defaults you passed in, overlaid by the
+merged document. Keep the defaults in TOML files of their own if you want them
+per platform, compose them, and pass the composed text to both steps.
+
 ## Command line
 
 ```console
-documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--no-align]
+documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+                      [--no-align] [--live-defaults]
 documented-toml check --default D.toml --user U.toml
 ```
 
 `merge` writes to stdout unless given `--output` or `--in-place`. `check` writes
 no document. Both commands print diagnostics to stderr and return a non-zero
 status for errors. `--no-align` keeps the spacing around `=` as the person
-wrote it.
+wrote it. `--live-defaults` writes a default nobody set as a key rather than a
+`#:` line.
 
 `--in-place` writes and syncs a sibling temporary file before renaming it over
 the user file.

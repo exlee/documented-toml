@@ -145,20 +145,61 @@ fn a_zero_byte_default_document_is_allowed() {
 }
 
 #[test]
-fn the_merged_document_is_also_the_effective_configuration() {
+fn the_merged_document_holds_what_the_person_set() {
     let merged = merge("##: Doc.\nadded = 3\nkept = 1\n", "kept = 7\n").unwrap();
     let document = merged.document();
-    assert_eq!(document["added"].as_integer(), Some(3));
     assert_eq!(document["kept"].as_integer(), Some(7));
+    assert!(document.get("added").is_none());
+    // The default is in the file all the same, one `#:` away from being set.
+    assert!(merged.to_toml_string().contains("#: added = 3"));
+}
+
+#[test]
+fn user_set_tells_a_value_the_person_chose_from_one_they_were_given() {
+    let defaults = "kept = 1\nleft = 2\n\n[table]\n\"dotted.name\" = 3\n";
+    let merged = merge(defaults, "kept = 7\n").unwrap();
+    assert!(merged.user_set("kept"));
+    assert!(!merged.user_set("left"));
+    assert!(!merged.user_set("table.\"dotted.name\""));
+    assert!(!merged.user_set("no such key"));
+
+    // A default written out unchanged is a value they chose.
+    let pinned = merge(defaults, "left = 2\n").unwrap();
+    assert!(pinned.user_set("left"));
+}
+
+#[test]
+fn user_set_reaches_through_tables_the_person_wrote() {
+    let merged = merge("[a]\nb = 1\nc = 2\n", "[a]\nb = 9\n").unwrap();
+    assert!(merged.user_set("a.b"));
+    assert!(!merged.user_set("a.c"));
+}
+
+#[test]
+fn live_defaults_materialise_every_key() {
+    let options = MergeOptions::new().defaults_commented(false);
+    let merged = options.merge("[a]\nb = 1\n\n[[c]]\nd = 2\n", "").unwrap();
+    let document = merged.document();
+    assert_eq!(document["a"]["b"].as_integer(), Some(1));
+    assert_eq!(document["c"][0]["d"].as_integer(), Some(2));
+
+    // Which is what makes the document the effective configuration, and what
+    // makes `user_set` say nothing there.
+    let merged = options
+        .merge("added = 3\nkept = 1\n", "kept = 7\n")
+        .unwrap();
+    assert!(merged.user_set("added"));
     assert_eq!(merged.to_toml_string(), merged.into_document().to_string());
 }
 
 #[test]
-fn every_default_key_is_materialised_with_a_live_value() {
-    let merged = merge("[a]\nb = 1\n\n[[c]]\nd = 2\n", "").unwrap();
-    let document = merged.document();
-    assert_eq!(document["a"]["b"].as_integer(), Some(1));
-    assert_eq!(document["c"][0]["d"].as_integer(), Some(2));
+fn defaults_are_commented_unless_turned_off() {
+    assert!(MergeOptions::new().comments_defaults());
+    assert!(
+        !MergeOptions::new()
+            .defaults_commented(false)
+            .comments_defaults()
+    );
 }
 
 #[test]
@@ -193,14 +234,17 @@ fn a_block_naming_a_key_nobody_sets_stays_where_it_was_written() {
 
 #[test]
 fn alignment_is_on_unless_turned_off() {
+    let defaults = "a = 1\nlonger = 2\n";
+    // Set to the shipped values, so no recorded default breaks the run up.
+    let user = "a = 1\nlonger = 2\n";
     assert!(MergeOptions::new().aligns_values());
     assert_eq!(
-        merge("a = 1\nlonger = 2\n", "").unwrap().to_toml_string(),
+        merge(defaults, user).unwrap().to_toml_string(),
         "a      = 1\nlonger = 2\n"
     );
     let off = MergeOptions::new()
         .align_values(false)
-        .merge("a = 1\nlonger = 2\n", "")
+        .merge(defaults, user)
         .unwrap();
     assert_eq!(off.to_toml_string(), "a = 1\nlonger = 2\n");
 }

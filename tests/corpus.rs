@@ -27,13 +27,17 @@ struct CorpusFile {
 /// A `--- DEF ---` section opens a group; the `--- USR ---` and `--- RES ---`
 /// pairs that follow all run against the same default. Flags after the
 /// delimiter set merge options for the whole group: `no-align` leaves the
-/// spacing around `=` as written.
+/// spacing around `=` as written, and `live-defaults` writes a default nobody
+/// set as a key rather than a `#:` line.
 #[derive(Debug)]
 struct Group {
     /// The text of the `--- DEF ---` section.
     default_src: String,
     /// Whether the group merges with `=` aligned. On unless `no-align`.
     align: bool,
+    /// Whether the group writes unset defaults as `#:` lines. On unless
+    /// `live-defaults`.
+    commented: bool,
     /// The cases stated against this default. A `--- DEF ---` with no
     /// `--- USR ---` after it is malformed, not empty.
     cases: NonEmpty<Case>,
@@ -181,7 +185,7 @@ impl CorpusFile {
     }
 
     fn group(display: &str, sections: Vec<Section>) -> Result<Vec<Group>, String> {
-        let mut collected: Vec<(String, bool, Vec<Case>)> = Vec::new();
+        let mut collected: Vec<(String, bool, bool, Vec<Case>)> = Vec::new();
         let mut pending: Option<(usize, String)> = None;
         let mut index = 0;
 
@@ -192,9 +196,11 @@ impl CorpusFile {
                         return Err(format!("{display}:{line}: --- USR --- with no --- RES ---"));
                     }
                     let mut align = true;
+                    let mut commented = true;
                     for flag in &section.flags {
                         match flag.as_str() {
                             "no-align" => align = false,
+                            "live-defaults" => commented = false,
                             other => {
                                 return Err(format!(
                                     "{}:{}: unknown flag {other}",
@@ -203,7 +209,7 @@ impl CorpusFile {
                             }
                         }
                     }
-                    collected.push((section.text, align, Vec::new()));
+                    collected.push((section.text, align, commented, Vec::new()));
                 }
                 SectionKind::Usr => {
                     if collected.is_empty() {
@@ -240,7 +246,7 @@ impl CorpusFile {
                     collected
                         .last_mut()
                         .expect("a group exists once a case is pending")
-                        .2
+                        .3
                         .push(Case {
                             index,
                             user_src,
@@ -255,12 +261,13 @@ impl CorpusFile {
 
         collected
             .into_iter()
-            .map(|(default_src, align, cases)| {
+            .map(|(default_src, align, commented, cases)| {
                 let cases = NonEmpty::from_vec(cases)
                     .ok_or_else(|| format!("{display}: a --- DEF --- states no cases"))?;
                 Ok(Group {
                     default_src,
                     align,
+                    commented,
                     cases,
                 })
             })
@@ -272,7 +279,9 @@ impl CorpusFile {
 
 impl Group {
     fn options(&self) -> MergeOptions {
-        MergeOptions::new().align_values(self.align)
+        MergeOptions::new()
+            .align_values(self.align)
+            .defaults_commented(self.commented)
     }
 }
 

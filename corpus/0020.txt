@@ -23,20 +23,20 @@ first = 9
 #: name = "Personal"
 
 ##: The second declared option.
-second = 2
+#: second = 2
 ### The same file with nothing written in it at all. The order is the order the
 ### defaults gave, optional keys included.
 --- USR ---
 --- RES ---
 ##: The first declared option.
-first = 1
+#: first = 1
 
 ##: How accounts are written:
 #: [[accounts]]
 #: name = "Personal"
 
 ##: The second declared option.
-second = 2
+#: second = 2
 ### A table the person has not written carries every key documented inside it,
 ### the declared ones and the documented ones alike.
 --- DEF ---
@@ -54,9 +54,9 @@ theme = "dark"
 [ui]
 theme = "light"
 --- RES ---
-[general]
+#: [general]
 ##: The one declared option.
-a = 1
+#: a = 1
 
 ##: Set it and the built-in editor is not used.
 #: editor = "kak"

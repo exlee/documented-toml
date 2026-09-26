@@ -7,6 +7,5 @@ option = true
 # my notes, at the bottom
 --- RES ---
 ##: The one option.
-option = true
-
+#: option = true
 # my notes, at the bottom

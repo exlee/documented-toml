@@ -1,5 +1,6 @@
-### A key the defaults gained since the person last opened the file is written
-### in, with its prose and no sample: the live value already is the default.
+### A key the defaults gained since the person last opened the file arrives as
+### the `#:` line it would be set from. They have not chosen it, so the file
+### does not say they did; the shipped value is one `#:` away all the same.
 --- DEF ---
 ##: Where to listen.
 host = "localhost"
@@ -14,12 +15,29 @@ host = "0.0.0.0"
 host = "0.0.0.0"
 
 ##: Added in 1.4.
-retries = 3
-### An empty user file is every default, with nothing recorded.
+#: retries = 3
+### An empty user file is every default, and the person has set none of them.
 --- USR ---
 --- RES ---
 ##: Where to listen.
+#: host = "localhost"
+
+##: Added in 1.4.
+#: retries = 3
+### `live-defaults` writes the same defaults as keys, for an application that
+### reads its configuration from the merged file alone.
+--- DEF --- live-defaults
+##: Where to listen.
 host = "localhost"
+
+##: Added in 1.4.
+retries = 3
+--- USR ---
+host = "0.0.0.0"
+--- RES ---
+##: Where to listen.
+#: host = "localhost"
+host = "0.0.0.0"
 
 ##: Added in 1.4.
 retries = 3

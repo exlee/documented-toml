@@ -1,9 +1,19 @@
 //! Blank lines between keys and sections. Alignment is off here so the
-//! spacing stands on its own.
+//! spacing stands on its own, and defaults are written as keys so the sections
+//! being spaced are there to space.
 
 use documented_toml::{MergeOptions, Merged};
 
 fn merge(defaults: &str, user: &str) -> Merged {
+    MergeOptions::new()
+        .align_values(false)
+        .defaults_commented(false)
+        .merge(defaults, user)
+        .unwrap()
+}
+
+/// The same, with defaults left as the `#:` lines they are by default.
+fn merge_commented(defaults: &str, user: &str) -> Merged {
     MergeOptions::new()
         .align_values(false)
         .merge(defaults, user)
@@ -66,6 +76,25 @@ fn preserves_spacing_in_optional_examples() {
     let first = merge(defaults, "").to_toml_string();
     assert!(first.contains("#:   'echo  hello',\n#:   'printf    world',\n"));
     check(defaults, &first, &first);
+}
+
+#[test]
+fn commented_defaults_keep_the_blank_lines_the_defaults_wrote() {
+    let defaults = "first = 1\n\nsecond = 2\n\n##: Third option.\nthird = 3\n";
+    let once = merge_commented(defaults, "").to_toml_string();
+    assert_eq!(
+        once,
+        "#: first = 1\n\n#: second = 2\n\n##: Third option.\n#: third = 3\n"
+    );
+    assert_eq!(merge_commented(defaults, &once).to_toml_string(), once);
+}
+
+#[test]
+fn a_commented_default_does_not_separate_the_key_written_against_it() {
+    let defaults = "[db]\nhost = 'local'\nport = 1\n";
+    let once = merge_commented(defaults, "[db]\nport = 2\n").to_toml_string();
+    assert_eq!(once, "[db]\n#: host = 'local'\n#: port = 1\nport = 2\n");
+    assert_eq!(merge_commented(defaults, &once).to_toml_string(), once);
 }
 
 #[test]

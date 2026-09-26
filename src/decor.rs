@@ -239,6 +239,9 @@ pub struct DocBlock {
     pub(crate) user_lines: Vec<String>,
     /// Whitespace before the key itself, taken from whoever supplied the key.
     pub(crate) indent: String,
+    /// Whether the defaults left a blank line above this key, which says the
+    /// key opens something of its own rather than continuing the run above it.
+    pub(crate) spaced: bool,
 }
 
 impl DocBlock {

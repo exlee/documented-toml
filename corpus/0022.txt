@@ -28,7 +28,9 @@ security = "tls"
 #: username = "jane"
 username = "me"
 ### Each header opens a span of its own, arrays of tables entry by entry.
---- DEF ---
+### These state the widths against defaults nobody set, so they are written
+### as keys: a `#:` line is a comment and is not measured.
+--- DEF --- live-defaults
 a = 1
 bb = 2
 [section]
@@ -50,7 +52,7 @@ c      = 4
 x  = 1
 yy = 2
 ### A dotted key is measured by its whole path, indentation included.
---- DEF ---
+--- DEF --- live-defaults
 [s]
 a.b = 1
   longer.key.path = 2
@@ -62,7 +64,7 @@ a.b               = 1
   longer.key.path = 2
 c                 = 3
 ### A value written over several lines keeps its own spacing and sets no width.
---- DEF ---
+--- DEF --- live-defaults
 a = 1
 longer = 2
 text = '''
@@ -99,7 +101,7 @@ bb = 2
 [one]
 only = 1
 ### `no-align` after `--- DEF ---` keeps the spacing as written.
---- DEF --- no-align
+--- DEF --- no-align live-defaults
 a = 1
 longer = 2
 --- USR ---

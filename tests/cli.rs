@@ -195,7 +195,8 @@ fn no_arguments_prints_the_usage() {
 fn no_align_keeps_the_spacing_as_written() {
     let sandbox = Sandbox::new("no-align");
     let defaults = sandbox.write("d.toml", "a = 1\nlonger = 2\n");
-    let user = sandbox.write("u.toml", "a = 5\n");
+    // Both set, so neither carries a recorded default to break the run up.
+    let user = sandbox.write("u.toml", "a = 5\nlonger = 2\n");
     let aligned = sandbox.run(&[
         arg("merge"),
         arg("--default"),

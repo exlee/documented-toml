@@ -14,9 +14,13 @@ use crate::template::{Template, comment_out};
 
 /// The merged document and its report.
 ///
-/// This is also the effective configuration. Every default key is materialised
-/// with a live value, so the file written back and the configuration a caller
-/// deserializes cannot drift apart.
+/// The document holds what the person set. A default they left alone is a `#:`
+/// line above the place it would go, which is a comment, so the document does
+/// not hold it: ask [`Merged::user_set`] which keys are theirs, and take the
+/// values for the rest from the defaults you passed in.
+///
+/// With [`MergeOptions::defaults_commented`] off, every default is materialised
+/// as a live key instead, and the document is the effective configuration.
 #[derive(Debug, Clone)]
 pub struct Merged {
     /// Everything the merge noticed.
@@ -79,6 +83,23 @@ impl Merged {
     pub fn newline(&self) -> Newline {
         self.newline
     }
+
+    /// Whether the person set a value at this dotted path.
+    ///
+    /// The path is read as a TOML key path, so a quoted segment holding a dot
+    /// is one segment. A path that does not parse is not set.
+    ///
+    /// A default they left alone is a `#:` line, which answers `false`; a
+    /// default they wrote out unchanged is a value they chose, which answers
+    /// `true`. With [`MergeOptions::defaults_commented`] off every declared
+    /// key is live, so this answers `true` for defaults too and tells you
+    /// nothing.
+    pub fn user_set(&self, path: &str) -> bool {
+        let Ok(path) = DottedPath::parse(path) else {
+            return false;
+        };
+        lookup(self.document.as_table(), &path).is_some_and(|item| !matches!(item, Item::None))
+    }
 }
 
 /// Walks the default document as the spine and transplants user values.
@@ -102,6 +123,9 @@ pub struct MergeEngine {
     /// Optional keys the person has not set, written back as `#:` lines and
     /// waiting for something to sit above.
     pub(crate) pending: Vec<String>,
+    /// Whether what is waiting wants a blank line between itself and the key
+    /// above it. It is what the defaults wrote above the first waiting key.
+    pub(crate) pending_spaced: bool,
     /// The dotted keys the walk has descended through, which the `[table]`
     /// header above does not supply. A recorded default is TOML, so it names
     /// its key the way the line under it does.
@@ -127,6 +151,7 @@ impl MergeEngine {
             report: Report::default(),
             template: Template::default(),
             pending: Vec::new(),
+            pending_spaced: true,
             dotted: Vec::new(),
         }
     }
@@ -150,7 +175,8 @@ impl MergeEngine {
 
         let mut document = DocumentMut::new();
         *document.as_table_mut() = root;
-        document.set_trailing(self.merged_trailing());
+        let keys = !document.as_table().is_empty();
+        document.set_trailing(self.merged_trailing(keys));
 
         Merged {
             report: self.report,
@@ -225,9 +251,14 @@ impl MergeEngine {
             self.merge_optional(&optional, &mut done, user, out, path, Some(&child));
             match user.get_key_value(name) {
                 None => {
-                    let first = out.is_empty();
-                    let (key, item) = self.default_entry(default_key, default_item, &child, first);
-                    out.insert_formatted(&key, item);
+                    if self.options.commented {
+                        self.comment_default(default_key, default_item, &child);
+                    } else {
+                        let first = out.is_empty();
+                        let (key, item) =
+                            self.default_entry(default_key, default_item, &child, first);
+                        out.insert_formatted(&key, item);
+                    }
                 }
                 Some((user_key, user_item)) => {
                     self.merge_item(default_key, default_item, user_key, user_item, out, &child);
@@ -296,7 +327,9 @@ impl MergeEngine {
                 None => {
                     // Nothing to sit above yet. It waits for whatever the walk
                     // reaches next, and for the end of the file if nothing.
-                    if !self.pending.is_empty() {
+                    if self.pending.is_empty() {
+                        self.pending_spaced = true;
+                    } else {
                         self.pending.push(String::new());
                     }
                     self.pending
@@ -486,10 +519,15 @@ impl MergeEngine {
             return;
         }
         let mut waiting = std::mem::take(&mut self.pending);
-        if !first {
+        if !first && self.pending_spaced {
             waiting.insert(0, String::new());
         }
-        waiting.push(String::new());
+        // The defaults' own spacing says whether the key below opens something
+        // of its own. A key written against the one above it reads as the next
+        // line of the same run, and a blank here would break the run up.
+        if !self.options.commented || block.spaced {
+            waiting.push(String::new());
+        }
         waiting.append(&mut block.floating);
         block.floating = waiting;
     }
@@ -498,7 +536,10 @@ impl MergeEngine {
     /// text and prose, the person's blanks and comments.
     fn block(&self, default_decor: &Decor, user_decor: &Decor) -> DocBlock {
         let (floating, touching) = Prefix::of(default_decor).split(self.marker());
-        let mut block = DocBlock::default();
+        let mut block = DocBlock {
+            spaced: spaced(&floating),
+            ..DocBlock::default()
+        };
         block.keep_user_text(&Prefix::of(user_decor), self.marker());
         block.take_docs(&touching);
         block.floating = self.standing_text(&floating);
@@ -597,6 +638,7 @@ impl MergeEngine {
         let mut block = DocBlock {
             leading_blanks: leading_blanks(&floating),
             indent: prefix.indent().to_owned(),
+            spaced: spaced(&floating),
             ..DocBlock::default()
         };
         block.take_docs(&touching);
@@ -607,6 +649,47 @@ impl MergeEngine {
         let mut item = self.docs_only(item, path);
         set_prefix(&mut key, &mut item, block.render(self.marker()));
         (key, item)
+    }
+
+    /// A default the person has not set, written back as the `#:` lines it
+    /// would be set from.
+    ///
+    /// It joins whatever is already waiting rather than being separated from
+    /// it: the spacing between two defaults is the spacing the defaults were
+    /// written with, which each entry carries above itself.
+    fn comment_default(&mut self, key: &Key, item: &Item, path: &DottedPath) {
+        // Nothing waiting, so the entry builds its block against the start of
+        // its own text and adds no separator of its own.
+        let waiting = std::mem::take(&mut self.pending);
+        // A table is commented out whole, header and keys together, so its
+        // keys are built as the live entries they would be inside it rather
+        // than each waiting on its own.
+        let commented = std::mem::replace(&mut self.options.commented, false);
+        let (key, item) = self.default_entry(key, item, path, true);
+        self.options.commented = commented;
+
+        let mut lines = comment_out(path, &key, &item, self.marker());
+        // Optional keys the table documents below its last key have nothing
+        // after them to sit above, so they close the block they belong to.
+        let inner = std::mem::take(&mut self.pending);
+        if !inner.is_empty() {
+            lines.push(String::new());
+            lines.extend(inner);
+        }
+
+        if waiting.is_empty() {
+            // The first thing to wait says how the whole of it is set apart
+            // from the key above. The blank lines the defaults put above this
+            // key are that separation, and one of them is kept.
+            let text = lines
+                .iter()
+                .position(|line| !line.trim().is_empty())
+                .unwrap_or(lines.len());
+            self.pending_spaced = text > 0;
+            lines.drain(..text);
+        }
+        self.pending = waiting;
+        self.pending.extend(lines);
     }
 
     /// The same stripping, applied through a table or an array of tables.
@@ -694,7 +777,10 @@ impl MergeEngine {
     /// The text after the last key belongs to no key, so it is not a doc block.
     /// The same ownership holds: the tool's lines there come from the defaults,
     /// and everything else is the person's and is kept as written.
-    fn merged_trailing(&mut self) -> String {
+    /// `keys` says the document has a key above this text to be set apart
+    /// from. A document of nothing but `#:` lines has none, so the text opens
+    /// the file.
+    fn merged_trailing(&mut self, keys: bool) -> String {
         let waiting = std::mem::take(&mut self.pending);
         let marker = self.marker();
         let prefix = Prefix::from_text(self.defaults.trailing());
@@ -704,6 +790,11 @@ impl MergeEngine {
         // Optional keys nothing came after belong at the end of the last table
         // they were written in, which is here.
         let mut waiting = waiting;
+        // Waiting lines carry the spacing the defaults gave the keys they came
+        // from, so what they open with is the separation they want. The
+        // defaults' own trailing text carries none, and is set apart from the
+        // last key by one blank line whatever it was written with.
+        let separated = waiting.is_empty() || self.pending_spaced;
         if !waiting.is_empty() {
             if !docs.is_empty() {
                 waiting.push(String::new());
@@ -711,13 +802,13 @@ impl MergeEngine {
             waiting.append(&mut docs);
             docs = waiting;
         }
-        // One blank line separates the end of the file from the last key,
-        // whatever the defaults happened to leave above their own trailing text.
-        let first = docs
-            .iter()
-            .position(|line| !line.trim().is_empty())
-            .unwrap_or(docs.len());
-        docs.drain(..first);
+        if separated {
+            let first = docs
+                .iter()
+                .position(|line| !line.trim().is_empty())
+                .unwrap_or(docs.len());
+            docs.drain(..first);
+        }
 
         let user = Prefix::from_text(self.user.trailing());
         let user_lines = user.lines(marker);
@@ -749,7 +840,7 @@ impl MergeEngine {
             return String::new();
         }
 
-        let mut out = String::from("\n");
+        let mut out = String::from(if keys && separated { "\n" } else { "" });
         for line in docs.iter().map(String::as_str).chain(mine) {
             out.push_str(line);
             out.push('\n');
@@ -845,6 +936,14 @@ fn opens_table(line: &PrefixLine, marker: &Marker) -> bool {
 /// The blank lines a key has above it in the defaults, which is what separates
 /// one documented option from the last when the person wrote no blanks of their
 /// own.
+/// Whether the defaults left a blank line anywhere above the key, which is how
+/// they say the key opens something rather than continuing what is above it.
+fn spaced(floating: &[PrefixLine]) -> bool {
+    floating
+        .iter()
+        .any(|line| matches!(line, PrefixLine::Blank { .. }))
+}
+
 fn leading_blanks(floating: &[PrefixLine]) -> Vec<String> {
     floating
         .iter()

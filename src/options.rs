@@ -14,6 +14,7 @@ pub struct MergeOptions {
     pub(crate) marker: Marker,
     pub(crate) migrations: Vec<Migration>,
     pub(crate) align: bool,
+    pub(crate) commented: bool,
 }
 
 impl Default for MergeOptions {
@@ -22,14 +23,39 @@ impl Default for MergeOptions {
             marker: Marker::default(),
             migrations: Vec::new(),
             align: true,
+            commented: true,
         }
     }
 }
 
 impl MergeOptions {
-    /// The default marker, no rename rules, and `=` aligned.
+    /// The default marker, no rename rules, `=` aligned, and unset defaults
+    /// written as `#:` lines.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Whether a default the person has not set is written as a `#:` line
+    /// rather than a live key. On unless turned off.
+    ///
+    /// Commented is the default because it is what makes the user's file say
+    /// what the user chose: a key present in the merged document is one they
+    /// set, which is what [`Merged::user_set`] reports. The shipped value is
+    /// still in the file, one `#:` away, so nothing is hidden from a reader.
+    ///
+    /// Turning this off materialises every default as a live key, so the file
+    /// written back and the configuration a caller deserializes from
+    /// [`Merged::into_document`] hold the same values. The cost is that the
+    /// file no longer distinguishes a value the person chose from one they
+    /// were given.
+    pub fn defaults_commented(mut self, yes: bool) -> Self {
+        self.commented = yes;
+        self
+    }
+
+    /// Whether this merge writes unset defaults as `#:` lines.
+    pub fn comments_defaults(&self) -> bool {
+        self.commented
     }
 
     /// Sets the two comment prefixes the tool owns: prose first, then the one

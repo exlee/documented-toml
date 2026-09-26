@@ -1,7 +1,8 @@
 //! The `documented-toml` command.
 //!
 //! ```text
-//! documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--no-align]
+//! documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+//!                       [--no-align] [--live-defaults]
 //! documented-toml check --default D.toml --user U.toml
 //! ```
 
@@ -14,13 +15,15 @@ use documented_toml::{MergeOptions, Merged};
 
 const USAGE: &str = "\
 usage:
-  documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT] [--no-align]
+  documented-toml merge --default D.toml --user U.toml [--in-place | --output OUT]
+                        [--no-align] [--live-defaults]
   documented-toml check --default D.toml --user U.toml
 
   merge  writes the merged document, to stdout unless --output or --in-place
   check  writes nothing
 
-  --no-align  keeps the spacing around = as the person wrote it
+  --no-align       keeps the spacing around = as the person wrote it
+  --live-defaults  writes a default nobody set as a key, not a #: line
 
 Both print diagnostics to stderr and exit non-zero when one of them is an error.
 ";
@@ -42,6 +45,7 @@ fn run() -> Result<ExitCode, String> {
     let user_src = read(&invocation.user)?;
     let merged = MergeOptions::new()
         .align_values(invocation.align)
+        .defaults_commented(invocation.commented)
         .merge(&default_src, &user_src)
         .map_err(|e| e.to_string())?;
 
@@ -137,6 +141,7 @@ struct Invocation {
     user: PathBuf,
     destination: Destination,
     align: bool,
+    commented: bool,
 }
 
 impl Invocation {
@@ -153,6 +158,7 @@ impl Invocation {
         let mut user = None;
         let mut destination = Destination::Stdout;
         let mut align = true;
+        let mut commented = true;
         while let Some(argument) = arguments.next() {
             let mut value = |name: &str| {
                 arguments
@@ -166,6 +172,7 @@ impl Invocation {
                 "--output" => destination = Destination::File(PathBuf::from(value("--output")?)),
                 "--in-place" => destination = Destination::InPlace,
                 "--no-align" => align = false,
+                "--live-defaults" => commented = false,
                 other => return Err(format!("no such option: {other}\n\n{USAGE}")),
             }
         }
@@ -176,6 +183,7 @@ impl Invocation {
             user: user.ok_or("--user is required")?,
             destination,
             align,
+            commented,
         };
         if invocation.command == Command::Check && invocation.destination != Destination::Stdout {
             return Err("check writes nothing, so it takes no --output or --in-place".to_owned());
@@ -216,6 +224,17 @@ mod tests {
         );
         let off = parse(&["merge", "--default", "d", "--user", "u", "--no-align"]).unwrap();
         assert!(!off.align);
+    }
+
+    #[test]
+    fn defaults_are_commented_unless_turned_off() {
+        assert!(
+            parse(&["merge", "--default", "d", "--user", "u"])
+                .unwrap()
+                .commented
+        );
+        let off = parse(&["merge", "--default", "d", "--user", "u", "--live-defaults"]).unwrap();
+        assert!(!off.commented);
     }
 
     #[test]

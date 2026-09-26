@@ -13,10 +13,11 @@ name = "mine"
 ##: One block per server.
 [[server]]
 name = "mine"
-### With no entry from the person, the defaults' own entries are written in.
+### With no entry from the person, the defaults' own entries are written out as
+### the block they would be written from.
 --- USR ---
 --- RES ---
 ##: One block per server.
-[[server]]
-name = "primary"
-port = 8080
+#: [[server]]
+#: name = "primary"
+#: port = 8080

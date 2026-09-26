@@ -10,6 +10,6 @@ retries = 3
 --- USR ---
 --- RES ---
 ##: Request timeout in seconds.
-timeout = 30
+#: timeout = 30
 
-retries = 3
+#: retries = 3

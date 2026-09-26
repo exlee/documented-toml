@@ -42,10 +42,15 @@ own source. Authored by the application's maintainers.
 
 **User document** the file on the person's disk.
 
-**Merged document** the output. It is both the file to write back and the
-effective configuration, because every default key is materialised into it with
-a live value. A caller that needs typed access deserializes the merged document
-and needs no second layering pass.
+**Merged document** the output: the file to write back, holding what the person
+set. A default they left alone is a `#:` line above where it would go, so the
+document does not hold it and `user_set` reports which keys are theirs. A caller
+wanting typed access overlays the document on the defaults it passed in.
+
+**Live defaults** `defaults_commented(false)`, which materialises every default
+as a key instead. The merged document is then the effective configuration and
+needs no second layering pass, at the price of a file that no longer says what
+the person chose.
 
 **Marker** a comment prefix that identifies text owned by the tool. There are
 two: `##:` for prose and `#:` for TOML text. Both configurable.
@@ -117,8 +122,9 @@ timeout = 120
 ```
 
 The person can see what they departed from without opening the application's
-source. When the value equals the default, or the key was absent and the merge
-inserted it, no such line is written: the live value already is the default.
+source. When the value equals the default no such line is written: the live
+value already is the default. A key the person never set has no live value at
+all, and is written as the `#:` line on its own.
 
 The line is TOML, so it names its key the way the line under it does. A key the
 person wrote dotted keeps every segment the `[table]` header above does not
@@ -213,9 +219,10 @@ counter = 1                   optional_counter = 5    #: counter = 1
 
 Unset, it stays the `#:` lines it was written as, at the point in the shape the
 defaults gave it. Nothing is materialised: the block says what the option may
-hold, not what it holds by default. This is the one place the merge does not
-write a default key out as a live value, and it is why an optional key needs
-its default spelled out in the block, there being no value to take one from.
+hold, not what it holds by default. A declared default nobody set is written
+the same way, the difference being only that its `#:` line is generated from
+the live value the defaults carry, where an optional key needs its default
+spelled out by hand, there being no value to take one from.
 
 An optional key keeps its place in the order (section 6): it is written where
 the defaults wrote it, above the declared key its block sat above, or at the
@@ -378,12 +385,14 @@ written it at the new path.
 ```rust
 pub fn merge(default_src: &str, user_src: &str) -> Result<Merged, Error>;
 
-pub struct MergeOptions { /* markers, migrations */ }
+pub struct MergeOptions { /* markers, migrations, align, commented */ }
 
 impl MergeOptions {
     pub fn new() -> Self;
     pub fn markers(self, prose: impl Into<String>, sample: impl Into<String>) -> Self;
     pub fn migrate(self, from: &str, to: &str) -> Self;
+    pub fn align_values(self, yes: bool) -> Self;
+    pub fn defaults_commented(self, yes: bool) -> Self;
     pub fn merge(&self, default_src: &str, user_src: &str) -> Result<Merged, Error>;
 }
 
@@ -393,6 +402,7 @@ impl Merged {
     pub fn document(&self) -> &toml_edit::DocumentMut;
     pub fn to_toml_string(&self) -> String;
     pub fn newline(&self) -> Newline;
+    pub fn user_set(&self, path: &str) -> bool;
 }
 
 pub enum Newline { Lf, CrLf }
@@ -431,9 +441,11 @@ them as TOML key paths at merge time, so an unreadable one fails the merge,
 not the builder call.
 
 `to_toml_string()` produces the file to write back. `document()` is the same
-content for callers that want to deserialize it. There is one document because
-every default key is materialised with a live value, so the file on disk and the
-effective configuration cannot drift apart.
+content for callers that want to deserialize it, which is what the person set
+and no more: the values they left alone come from the defaults, which the caller
+already has. `user_set(path)` answers which is which. Under `live_defaults` the
+document is the whole effective configuration instead, and `user_set` answers
+`true` for everything the defaults declare.
 
 ## 10. Implementation notes
 
@@ -531,6 +543,9 @@ interrupted run cannot leave a truncated config behind.
 - A TOML comment beginning with `###` cannot appear inside a corpus file.
 - The merge is not idempotent across a change in the defaults, which is the
   point; it is idempotent when the defaults are unchanged.
+- A default the person writes out by hand, value unchanged, counts as set.
+  Nothing distinguishes it from a value they weighed and chose, and treating
+  it as unset would delete a line they wrote.
 
 ## 14. Open
 

@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A default the person has not set is written as a `#:` line instead of a
+  live key, so the merged document holds their choices and nothing else.
+  `MergeOptions::defaults_commented(false)` and `--live-defaults` restore the
+  previous behaviour.
+- Waiting `#:` lines are separated from the key above them only where the
+  defaults left a blank line there, so keys written against each other stay
+  against each other.
+
+### Added
+
+- `Merged::user_set(path)`, answering whether the person set a value at a
+  dotted path.
+
 ## [0.1.5] - 2026-09-15
 
 ### Changed
