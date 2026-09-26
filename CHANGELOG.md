@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-26
+
 ### Added
 
 - `Merged::set(path, value)`, writing a value into the person's file where
