@@ -94,11 +94,20 @@ impl Merged {
     /// `true`. With [`MergeOptions::defaults_commented`] off every declared
     /// key is live, so this answers `true` for defaults too and tells you
     /// nothing.
+    ///
+    /// A section whose keys are all commented is written as a live but empty
+    /// `[table]`, so that setting one of them is uncommenting one line. Such a
+    /// table holds nothing the person chose and answers `false`.
     pub fn user_set(&self, path: &str) -> bool {
         let Ok(path) = DottedPath::parse(path) else {
             return false;
         };
-        lookup(self.document.as_table(), &path).is_some_and(|item| !matches!(item, Item::None))
+        lookup(self.document.as_table(), &path).is_some_and(|item| match item {
+            Item::None => false,
+            Item::Table(table) => !table.is_empty(),
+            Item::ArrayOfTables(array) => !array.is_empty(),
+            Item::Value(_) => true,
+        })
     }
 }
 
@@ -251,7 +260,7 @@ impl MergeEngine {
             self.merge_optional(&optional, &mut done, user, out, path, Some(&child));
             match user.get_key_value(name) {
                 None => {
-                    if self.options.commented {
+                    if self.options.commented && !opens_section(default_item) {
                         self.comment_default(default_key, default_item, &child);
                     } else {
                         let first = out.is_empty();
@@ -391,6 +400,9 @@ impl MergeEngine {
                     block.keep_user_text(&Prefix::of(entry.decor()), self.marker());
                     if index == 1 && !unset.is_empty() {
                         block.floating = unset.clone();
+                        if self.pending_spaced {
+                            block.floating.insert(0, String::new());
+                        }
                         block.floating.push(String::new());
                     }
                     entry.decor_mut().set_prefix(block.render(self.marker()));
@@ -936,6 +948,19 @@ fn opens_table(line: &PrefixLine, marker: &Marker) -> bool {
 /// The blank lines a key has above it in the defaults, which is what separates
 /// one documented option from the last when the person wrote no blanks of their
 /// own.
+/// Whether a default writes a `[table]` header of its own.
+///
+/// Such a header is written live even when every key under it is commented
+/// out: the header is the place the keys go, and a person setting one of them
+/// should not have to uncomment the section first. An empty `[table]` says the
+/// same thing as no table at all, which is why this is safe to write.
+///
+/// An array of tables is not: an empty `[[entry]]` is one entry holding
+/// nothing, not the absence of entries, so its header stays commented.
+fn opens_section(item: &Item) -> bool {
+    matches!(item, Item::Table(table) if !table.is_dotted())
+}
+
 /// Whether the defaults left a blank line anywhere above the key, which is how
 /// they say the key opens something rather than continuing what is above it.
 fn spaced(floating: &[PrefixLine]) -> bool {
@@ -1030,13 +1055,28 @@ fn strip(value: &mut Value) {
 
 /// Separates visible section headers, including their documentation, from
 /// preceding values or sections. Implicit parents emit no header.
+/// Whether a header's prefix already holds the blank line that sets the
+/// section apart from what is above it.
+///
+/// The blank belongs above the doc block that touches the header, not at the
+/// top of the prefix: text flushed there can belong to the section before this
+/// one, and putting the blank above it would read as if it opened this one.
+fn separated(raw: &str) -> bool {
+    let mut lines: Vec<&str> = raw.split('\n').collect();
+    // What follows the last newline is the header's own indentation.
+    lines.pop();
+    while lines.last().is_some_and(|line| !line.trim().is_empty()) {
+        lines.pop();
+    }
+    lines.last().is_some_and(|line| line.trim().is_empty())
+}
+
 fn space_sections(table: &mut Table, emitted: &mut bool, header: bool) {
     let has_values = !table.get_values().is_empty();
     if header {
         if *emitted {
             let prefix = Prefix::of(table.decor());
-            let first_line = prefix.raw.split_once('\n').map(|(line, _)| line);
-            if !first_line.is_some_and(|line| line.trim().is_empty()) {
+            if !separated(&prefix.raw) {
                 table.decor_mut().set_prefix(format!("\n{}", prefix.raw));
             }
         }

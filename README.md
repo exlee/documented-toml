@@ -72,7 +72,9 @@ timeout = 120
 ```
 
 The file holds what the user set. Everything else is a `#:` line, so the
-shipped value is visible without the file claiming they chose it. Ask
+shipped value is visible without the file claiming they chose it. A section
+keeps its `[table]` header, so setting one of its keys is uncommenting one
+line. Ask
 `Merged::user_set("log")` which values are theirs, and take the rest from the
 defaults you passed in.
 

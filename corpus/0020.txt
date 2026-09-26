@@ -54,7 +54,7 @@ theme = "dark"
 [ui]
 theme = "light"
 --- RES ---
-#: [general]
+[general]
 ##: The one declared option.
 #: a = 1
 

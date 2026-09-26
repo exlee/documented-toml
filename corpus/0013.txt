@@ -1,5 +1,6 @@
-### A table the person did not write arrives as the block they would write it
-### from, header and all, and the tables nested under it come with it.
+### A table the person did not write arrives with its header live and its keys
+### commented: the header is where the keys go, so setting one is uncommenting
+### one line. The tables nested under it come along the same way.
 --- DEF ---
 ##: Everything about the network.
 [net]
@@ -21,7 +22,7 @@ timeout = 5
 timeout = 5
 
 ##: Retry policy.
-#: [net.retry]
+[net.retry]
 ##: How many times.
 #: count = 3
 ### `live-defaults` inserts the same table as keys instead.

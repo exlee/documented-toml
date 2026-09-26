@@ -47,6 +47,11 @@ set. A default they left alone is a `#:` line above where it would go, so the
 document does not hold it and `user_set` reports which keys are theirs. A caller
 wanting typed access overlays the document on the defaults it passed in.
 
+A section whose keys are all commented keeps its `[table]` header live: the
+header is where the keys go, and an empty table says what no table says. An
+array of tables keeps its header commented, an empty `[[entry]]` being one
+entry holding nothing.
+
 **Live defaults** `defaults_commented(false)`, which materialises every default
 as a key instead. The merged document is then the effective configuration and
 needs no second layering pass, at the price of a file that no longer says what

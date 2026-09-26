@@ -60,3 +60,24 @@ port = 6000
 
 ##: The pool.
 #: pool = 8
+### A section header is written live even when every key under it is
+### commented, so setting one of them is uncommenting one line. An array of
+### tables is not: an empty entry is one entry holding nothing, which is not
+### what a person who set none of them meant.
+--- DEF ---
+##: The database.
+[db]
+host = "localhost"
+
+##: One block per server.
+[[server]]
+name = "primary"
+--- USR ---
+--- RES ---
+##: The database.
+[db]
+#: host = "localhost"
+
+##: One block per server.
+#: [[server]]
+#: name = "primary"

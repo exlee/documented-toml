@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A section whose keys are all commented keeps its `[table]` header live, so
+  setting one of its keys is uncommenting one line rather than uncommenting
+  the header too. An array of tables keeps its header commented: an empty
+  `[[entry]]` is one entry holding nothing, not the absence of entries.
+- `Merged::user_set` answers `false` for an empty table, which is what such a
+  header leaves in the document.
+
+### Fixed
+
+- Section spacing looked at the top of a header's comment block rather than
+  the line above the header, so a blank line could land above text belonging
+  to the section before it.
+
 ## [0.2.0] - 2026-09-26
 
 ### Changed

@@ -169,6 +169,28 @@ fn user_set_tells_a_value_the_person_chose_from_one_they_were_given() {
 }
 
 #[test]
+fn a_section_nobody_set_keeps_its_header_and_counts_as_unset() {
+    let merged = merge("##: The database.\n[db]\nhost = \"localhost\"\n", "").unwrap();
+    let text = merged.to_toml_string();
+    // The header is there to write under; the key under it is not set.
+    assert!(text.contains("\n[db]\n"), "{text}");
+    assert!(text.contains("#: host = \"localhost\""), "{text}");
+    assert!(!merged.user_set("db"));
+    assert!(!merged.user_set("db.host"));
+}
+
+#[test]
+fn an_array_of_tables_nobody_set_keeps_its_header_commented() {
+    // An empty entry is one entry holding nothing, which is not what a person
+    // who set none of them meant.
+    let merged = merge("##: Servers.\n[[server]]\nname = \"primary\"\n", "").unwrap();
+    let text = merged.to_toml_string();
+    assert!(text.contains("#: [[server]]"), "{text}");
+    assert!(!text.contains("\n[[server]]"), "{text}");
+    assert!(!merged.user_set("server"));
+}
+
+#[test]
 fn user_set_reaches_through_tables_the_person_wrote() {
     let merged = merge("[a]\nb = 1\nc = 2\n", "[a]\nb = 9\n").unwrap();
     assert!(merged.user_set("a.b"));
